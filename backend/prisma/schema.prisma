@@ -1,0 +1,132 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  OPERATOR
+}
+
+enum ChargerStatus {
+  AVAILABLE
+  IN_USE
+  OFFLINE
+  MAINTENANCE
+  CRITICAL_ERROR
+}
+
+enum SessionStatus {
+  ACTIVE
+  FINISHED
+  CANCELED
+  WAITING_PAYMENT
+}
+
+enum PaymentMethod {
+  PIX
+  CARD
+  DIGITAL_WALLET
+  SIMULATED
+}
+
+enum PaymentStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+enum AlertSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AlertStatus {
+  OPEN
+  CHECKING
+  RESOLVED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(OPERATOR)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Client {
+  id        String            @id @default(cuid())
+  name      String
+  vehicle   String
+  plate     String            @unique
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  sessions  ChargingSession[]
+}
+
+model Charger {
+  id             String            @id @default(cuid())
+  name           String
+  location       String
+  connectorType  String
+  status         ChargerStatus
+  powerKw        Decimal           @db.Decimal(10, 2)
+  pricePerKwh    Decimal           @db.Decimal(10, 2)
+  temperature    Decimal?          @db.Decimal(10, 2)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  sessions       ChargingSession[]
+  alerts         Alert[]
+}
+
+model ChargingSession {
+  id              String        @id @default(cuid())
+  code            String        @unique
+  clientId        String
+  chargerId       String
+  startTime       DateTime
+  endTime         DateTime?
+  durationMinutes Int?
+  energyKwh       Decimal?      @db.Decimal(10, 3)
+  totalPrice      Decimal?      @db.Decimal(10, 2)
+  status          SessionStatus
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  client          Client        @relation(fields: [clientId], references: [id])
+  charger         Charger       @relation(fields: [chargerId], references: [id])
+  payment         Payment?
+}
+
+model Payment {
+  id        String        @id @default(cuid())
+  code      String        @unique
+  sessionId String        @unique
+  method    PaymentMethod
+  amount    Decimal       @db.Decimal(10, 2)
+  status    PaymentStatus
+  paidAt    DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  session   ChargingSession @relation(fields: [sessionId], references: [id])
+}
+
+model Alert {
+  id          String        @id @default(cuid())
+  title       String
+  description String
+  severity    AlertSeverity
+  status      AlertStatus   @default(OPEN)
+  chargerId   String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  charger     Charger?      @relation(fields: [chargerId], references: [id])
+}
