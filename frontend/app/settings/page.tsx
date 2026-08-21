@@ -20,9 +20,9 @@ const settings = [
   {
     icon: KeyRound,
     label: "Autenticacao",
-    value: "Sessao local visual",
+    value: "Sessao temporaria visual",
     status: "pendente" as const,
-    detail: "Trocar por POST /api/login e JWT real.",
+    detail: "Mock sem senha persistida; trocar por POST /api/login e JWT real.",
   },
   {
     icon: ShieldCheck,

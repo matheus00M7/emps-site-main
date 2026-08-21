@@ -16,8 +16,8 @@ import { api } from "@/services/emps-api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("lcacchallenge@gmail.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -80,6 +80,8 @@ export default function LoginPage() {
               <input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+                placeholder="E-mail"
+                required
                 type="email"
                 autoComplete="email"
                 aria-label="E-mail"
@@ -92,6 +94,9 @@ export default function LoginPage() {
               <input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
+                minLength={6}
+                placeholder="Senha"
+                required
                 type="password"
                 autoComplete="current-password"
                 aria-label="Senha"
@@ -102,7 +107,7 @@ export default function LoginPage() {
 
           <div className="login-options">
             <label className="login-check">
-              <input type="checkbox" defaultChecked />
+              <input type="checkbox" />
               <span>Lembrar senha</span>
             </label>
             <button type="button">Esqueci a senha</button>

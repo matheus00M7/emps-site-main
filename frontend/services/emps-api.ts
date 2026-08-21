@@ -31,29 +31,29 @@ function clone<T>(value: T): T {
 }
 
 function hasBrowserStorage() {
-  return typeof window !== "undefined" && Boolean(window.localStorage);
+  return typeof window !== "undefined" && Boolean(window.sessionStorage);
 }
 
 export const frontSession = {
   get(): FrontSession | null {
     if (!hasBrowserStorage()) return null;
-    const raw = window.localStorage.getItem(SESSION_KEY);
+    const raw = window.sessionStorage.getItem(SESSION_KEY);
     if (!raw) return null;
 
     try {
       return JSON.parse(raw) as FrontSession;
     } catch {
-      window.localStorage.removeItem(SESSION_KEY);
+      window.sessionStorage.removeItem(SESSION_KEY);
       return null;
     }
   },
   set(session: FrontSession) {
     if (!hasBrowserStorage()) return;
-    window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
   },
   clear() {
     if (!hasBrowserStorage()) return;
-    window.localStorage.removeItem(SESSION_KEY);
+    window.sessionStorage.removeItem(SESSION_KEY);
   },
 };
 
