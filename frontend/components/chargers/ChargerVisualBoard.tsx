@@ -218,17 +218,6 @@ export function ChargerVisualBoard({
     return () => window.clearInterval(intervalId);
   }, []);
 
-  const available = visibleChargers.filter(
-    (item) => item.status === "disponivel"
-  ).length;
-  const occupied = visibleChargers.filter((item) => item.status === "em_uso").length;
-  const warning = visibleChargers.filter(
-    (item) => item.status === "manutencao"
-  ).length;
-  const broken = visibleChargers.filter((item) =>
-    ["offline", "erro"].includes(item.status)
-  ).length;
-
   function openManualRelease(charger: Charger) {
     if (charger.status !== "disponivel") return;
 
@@ -573,23 +562,6 @@ export function ChargerVisualBoard({
         compact ? " charger-visual-board--compact" : ""
       }`}
     >
-      <div className="charger-visual-header">
-        <div className="charger-legend" aria-label="Resumo de status">
-          <span className="charger-legend__item charger-legend__item--free">
-            {available} liberados
-          </span>
-          <span className="charger-legend__item charger-legend__item--busy">
-            {occupied} ocupados
-          </span>
-          <span className="charger-legend__item charger-legend__item--warning">
-            {warning} atencao
-          </span>
-          <span className="charger-legend__item charger-legend__item--danger">
-            {broken} quebrados
-          </span>
-        </div>
-      </div>
-
       <div className="charger-map">
         {visibleChargers.map((charger) => {
           const visual = chargerVisualStates[charger.status];

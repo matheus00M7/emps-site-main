@@ -112,6 +112,15 @@
   width: 32px;
 }
 
+.emps-logo__mask {
+  background: currentColor;
+  display: block;
+  height: 100%;
+  mask: url("/emps-icon-silver.png") center / contain no-repeat;
+  -webkit-mask: url("/emps-icon-silver.png") center / contain no-repeat;
+  width: 100%;
+}
+
 .emps-logo path {
   fill: none;
   stroke: currentColor;
@@ -131,11 +140,10 @@
   background: transparent;
   border: 0;
   box-shadow: none;
-  color: var(--coral);
   display: flex;
-  height: 28px;
+  height: 26px;
   justify-content: center;
-  width: 28px;
+  width: 24px;
 }
 
 .rail-brand .emps-logo svg,
@@ -236,11 +244,15 @@
   width: 36px;
 }
 
+.nav-item svg {
+  color: currentColor;
+}
+
 .nav-item:hover,
 .nav-item--active {
   background: #34363a;
   border-color: #3c3e42;
-  color: var(--text);
+  color: #f1f4f7;
   box-shadow: 0 8px 20px #0000002c;
   transform: translateY(-2px);
 }
@@ -254,21 +266,21 @@
 }
 
 .nav-item--active svg {
-  color: var(--coral);
+  color: currentColor;
 }
 
 .emps-rail-trigger .emps-logo--compact {
   align-items: center;
-  color: #f4f6f8;
+  color: currentColor;
   display: flex;
-  filter: drop-shadow(0 0 6px #ffffff30);
-  height: 24px;
+  height: 25px;
   justify-content: center;
-  width: 24px;
+  width: 22px;
 }
 
-.emps-rail-trigger .emps-logo--compact .bolt {
-  opacity: 0.92;
+.emps-rail-trigger .emps-logo--compact .emps-logo__mask {
+  height: 25px;
+  width: 22px;
 }
 
 .emps-rail-trigger .emps-logo--compact svg {
@@ -278,7 +290,7 @@
 
 .emps-rail-trigger.nav-item--active .emps-logo--compact,
 .emps-rail-trigger.nav-item--active svg {
-  color: #f4f6f8;
+  color: currentColor;
 }
 
 .nav-item--readonly {
@@ -420,7 +432,8 @@
 }
 
 .topbar-title span,
-.section-heading span,
+.section-heading > div > span,
+.section-heading__copy > span,
 .form-eyebrow {
   color: #9ea5af;
   display: block;
@@ -476,8 +489,36 @@
 }
 
 .topbar-actions {
-  gap: 18px;
+  gap: 16px;
   justify-content: flex-end;
+}
+
+.topbar-emps-brand {
+  align-items: center;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  margin-right: 2px;
+  width: 132px;
+}
+
+.topbar-emps-brand--title {
+  height: 50px;
+  justify-content: flex-start;
+  margin-right: 0;
+  width: 174px;
+}
+
+.topbar-emps-brand__image {
+  display: block;
+  height: auto;
+  max-height: 34px;
+  object-fit: contain;
+  width: 100%;
+}
+
+.topbar-emps-brand--title .topbar-emps-brand__image {
+  max-height: 50px;
 }
 
 .sems-top-action {

@@ -127,10 +127,6 @@
     grid-template-columns: 1fr;
   }
 
-  .charger-legend {
-    justify-content: flex-start;
-  }
-
   .ev-car {
     right: 12px;
     width: 112px;
@@ -146,6 +142,24 @@
 
   .topbar-actions {
     margin-top: 12px;
+  }
+
+  .topbar-emps-brand {
+    height: 29px;
+    width: 108px;
+  }
+
+  .topbar-emps-brand--title {
+    height: 42px;
+    width: 146px;
+  }
+
+  .topbar-emps-brand__image {
+    max-height: 29px;
+  }
+
+  .topbar-emps-brand--title .topbar-emps-brand__image {
+    max-height: 42px;
   }
 
   .topbar-title h1 {

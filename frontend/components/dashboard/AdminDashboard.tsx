@@ -1,9 +1,14 @@
 "use client";
 
 import {
+  Activity,
   AlertTriangle,
+  BatteryCharging,
+  CircleDollarSign,
   RefreshCw,
+  Zap,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import {
   Area,
@@ -33,21 +38,73 @@ import {
 import { api } from "@/services/emps-api";
 
 function Metric({
+  bars,
   label,
+  progress,
+  sideLabel,
+  sideValue,
   value,
   detail,
   tone,
   icon: Icon,
 }: DashboardMetric) {
   return (
-    <article className="metric-card">
-      <span className={`metric-icon metric-icon--${tone}`}>
-        <Icon size={19} aria-hidden="true" />
-      </span>
-      <small>{label}</small>
-      <strong>{value}</strong>
-      <em>{detail}</em>
+    <article className={`metric-card metric-card--${tone}`}>
+      <div className="metric-card__head">
+        <span className={`metric-icon metric-icon--${tone}`}>
+          <Icon size={18} aria-hidden="true" />
+        </span>
+        <small>{label}</small>
+      </div>
+
+      <div className="metric-card__body">
+        <div className="metric-card__main">
+          <strong>{value}</strong>
+          <em>{detail}</em>
+        </div>
+
+        <div className="metric-card__insight">
+          <span>{sideValue}</span>
+          <small>{sideLabel}</small>
+          <div className="metric-card__bars" aria-hidden="true">
+            {bars.map((bar, index) => (
+              <i
+                key={`${label}-${index}`}
+                style={{ height: `${bar}%` }}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="metric-card__progress" aria-hidden="true">
+        <span style={{ width: `${progress}%` }} />
+      </div>
     </article>
+  );
+}
+
+function SectionHeading({
+  eyebrow,
+  icon: Icon,
+  title,
+  tone,
+}: {
+  eyebrow: string;
+  icon: LucideIcon;
+  title: string;
+  tone: "infra" | "monitor" | "alert" | "money" | "energy";
+}) {
+  return (
+    <div className={`section-heading section-heading--${tone}`}>
+      <span className="section-heading__marker">
+        <Icon size={15} aria-hidden="true" />
+      </span>
+      <div className="section-heading__copy">
+        <span>{eyebrow}</span>
+        <h2>{title}</h2>
+      </div>
+    </div>
   );
 }
 
@@ -85,6 +142,7 @@ export function AdminDashboard() {
   return (
     <AppShell
       eyebrow="EMPS / Operacao"
+      showEmpsHeaderLogo
       title="Painel do Eletroposto"
     >
       {loading || !data ? (
@@ -92,22 +150,23 @@ export function AdminDashboard() {
       ) : (
         <>
           <section className="panel dashboard-chargers-panel">
-            <div className="section-heading">
-              <div>
-                <h2>Infraestrutura - Status dos carregadores</h2>
-              </div>
-            </div>
+            <SectionHeading
+              eyebrow="Infraestrutura"
+              icon={BatteryCharging}
+              title="Status dos carregadores"
+              tone="infra"
+            />
             <ChargerVisualBoard chargers={data.carregadores} />
           </section>
 
           <div className="dashboard-grid dashboard-grid--wide">
             <section className="panel table-panel">
-              <div className="section-heading">
-                <div>
-                  <span>Monitoramento</span>
-                  <h2>Sessoes recentes</h2>
-                </div>
-              </div>
+              <SectionHeading
+                eyebrow="Monitoramento"
+                icon={Activity}
+                title="Sessoes recentes"
+                tone="monitor"
+              />
               <div className="table-wrap">
                 <table>
                   <thead>
@@ -141,12 +200,12 @@ export function AdminDashboard() {
             </section>
 
             <section className="panel side-stack">
-              <div className="section-heading">
-                <div>
-                  <span>Atencao</span>
-                  <h2>Alertas abertos</h2>
-                </div>
-              </div>
+              <SectionHeading
+                eyebrow="Atencao"
+                icon={AlertTriangle}
+                title="Alertas abertos"
+                tone="alert"
+              />
               {data.alertas.slice(0, 4).map((alert) => (
                 <article className="alert-row" key={alert.alertaId}>
                   <AlertTriangle size={17} aria-hidden="true" />
@@ -170,12 +229,12 @@ export function AdminDashboard() {
 
           <div className="dashboard-grid dashboard-grid--charts">
             <section className="chart-panel">
-              <div className="section-heading">
-                <div>
-                  <span>Financeiro</span>
-                  <h2>Receita por hora</h2>
-                </div>
-              </div>
+              <SectionHeading
+                eyebrow="Financeiro"
+                icon={CircleDollarSign}
+                title="Receita por hora"
+                tone="money"
+              />
               <div className="chart-box">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={data.receitaPorHora} margin={{ top: 12, right: 16, left: -18, bottom: 0 }}>
@@ -196,12 +255,12 @@ export function AdminDashboard() {
             </section>
 
             <section className="chart-panel">
-              <div className="section-heading">
-                <div>
-                  <span>Energia</span>
-                  <h2>kWh comercializados</h2>
-                </div>
-              </div>
+              <SectionHeading
+                eyebrow="Energia"
+                icon={Zap}
+                title="kWh comercializados"
+                tone="energy"
+              />
               <div className="chart-box">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={data.energiaPorHora} margin={{ top: 12, right: 16, left: -18, bottom: 0 }}>

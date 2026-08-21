@@ -17,10 +17,7 @@ import {
 function EmpsLogo({ compact = false }: { compact?: boolean }) {
   return (
     <span className={compact ? "emps-logo emps-logo--compact" : "emps-logo"}>
-      <svg viewBox="0 0 42 42" aria-hidden="true" focusable="false">
-        <path d="M9 8v26h17M10 21h15M10 8h18" />
-        <path className="bolt" d="m29 10-8 13h7l-5 11 12-15h-7l5-9" />
-      </svg>
+      <span className="emps-logo__mask" aria-hidden="true" />
     </span>
   );
 }
@@ -51,11 +48,13 @@ export function AppShell({
   eyebrow,
   title,
   description,
+  showEmpsHeaderLogo = false,
   children,
 }: {
   eyebrow: string;
   title: string;
   description?: string;
+  showEmpsHeaderLogo?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -171,11 +170,27 @@ export function AppShell({
             >
               <Menu size={20} />
             </button>
-            <div>
-              <span>{breadcrumb}</span>
-              <h1>{title}</h1>
-              {description && <p>{description}</p>}
-            </div>
+            {showEmpsHeaderLogo ? (
+              <span
+                className="topbar-emps-brand topbar-emps-brand--title"
+                aria-label={title}
+              >
+                <Image
+                  alt="EMPS"
+                  className="topbar-emps-brand__image"
+                  height={428}
+                  priority
+                  src="/emps-logo-red.png"
+                  width={1261}
+                />
+              </span>
+            ) : (
+              <div>
+                <span>{breadcrumb}</span>
+                <h1>{title}</h1>
+                {description && <p>{description}</p>}
+              </div>
+            )}
           </div>
 
           <div className="topbar-actions" aria-label="Acoes SEMS+">
