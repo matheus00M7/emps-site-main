@@ -4,7 +4,7 @@ import {
   ChargerStatus,
   PaymentStatus,
   SessionStatus,
-} from "./domain";
+} from "@/domain/emps";
 
 export function formatCurrency(value: number) {
   return value.toLocaleString("pt-BR", {
@@ -116,14 +116,16 @@ export function statusTone(
   ) {
     return "success";
   }
-  if (["ativa", "verificando", "media", "aguardando_pagamento"].includes(status)) {
+  if (
+    ["em_uso", "ativa", "verificando", "media", "aguardando_pagamento"].includes(
+      status
+    )
+  ) {
     return "info";
   }
   if (["manutencao", "pendente", "alta"].includes(status)) return "warning";
   if (
-    ["em_uso", "offline", "erro", "recusado", "critica", "cancelada"].includes(
-      status
-    )
+    ["offline", "erro", "recusado", "critica", "cancelada"].includes(status)
   ) {
     return "danger";
   }

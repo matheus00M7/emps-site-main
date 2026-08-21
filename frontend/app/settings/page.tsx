@@ -6,8 +6,8 @@ import {
   ShieldCheck,
   WalletCards,
 } from "lucide-react";
-import { AppShell } from "@/components/AppShell";
-import { StatusBadge } from "@/components/StatusBadge";
+import { AppShell } from "@/components/shell/AppShell";
+import { StatusBadge } from "@/components/status/StatusBadge";
 
 const settings = [
   {
@@ -82,3 +82,4 @@ export default function SettingsPage() {
     </AppShell>
   );
 }
+

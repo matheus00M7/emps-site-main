@@ -4,7 +4,7 @@ import {
   ChargerStatus,
   PaymentStatus,
   SessionStatus,
-} from "@/lib/domain";
+} from "@/domain/emps";
 import {
   alertStatusLabel,
   chargerStatusLabel,
@@ -12,7 +12,7 @@ import {
   sessionStatusLabel,
   severityLabel,
   statusTone,
-} from "@/lib/formatters";
+} from "@/utils/formatters";
 
 type StatusValue =
   | ChargerStatus
@@ -74,3 +74,4 @@ export function StatusBadge({
     </span>
   );
 }
+

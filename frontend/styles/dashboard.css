@@ -1,0 +1,166 @@
+.metric-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 14px;
+}
+
+.metric-card,
+.panel,
+.chart-panel,
+.resource-toolbar,
+.setting-card {
+  background: linear-gradient(180deg, #242628 0%, #202224 100%);
+  border: 1px solid #383a3e;
+  border-radius: 8px;
+  box-shadow: 0 14px 34px #00000036, inset 0 1px #ffffff08;
+}
+
+.metric-card {
+  min-height: 134px;
+  padding: 14px;
+  transition:
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.metric-card:hover {
+  border-color: #4b4e55;
+  box-shadow: var(--lift-shadow);
+  transform: translateY(-4px);
+}
+
+.panel,
+.chart-panel {
+  transition:
+    border-color var(--motion-fast),
+    box-shadow var(--motion-fast),
+    transform var(--motion-fast);
+}
+
+.panel:hover,
+.chart-panel:hover {
+  border-color: #44474d;
+  box-shadow: 0 18px 38px #0000003d, inset 0 1px #ffffff0b;
+  transform: translateY(-2px);
+}
+
+.metric-icon {
+  border-radius: 8px;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.metric-icon--coral {
+  background: #ff323a1b;
+  color: var(--coral);
+}
+
+.metric-icon--violet {
+  background: #a892ff1b;
+  color: var(--violet);
+}
+
+.metric-icon--cyan {
+  background: #55d6e81b;
+  color: var(--cyan);
+}
+
+.metric-icon--blue {
+  background: #6aa7ff1b;
+  color: var(--blue);
+}
+
+.metric-icon--green {
+  background: #2cd28a1b;
+  color: var(--green);
+}
+
+.metric-icon--orange {
+  background: #ffad661b;
+  color: var(--orange);
+}
+
+.metric-icon--yellow {
+  background: #ffd1661b;
+  color: var(--yellow);
+}
+
+.metric-icon--red {
+  background: #ff6b6b1b;
+  color: var(--red);
+}
+
+.metric-card small,
+.metric-card strong,
+.metric-card em {
+  display: block;
+}
+
+.metric-card small {
+  color: var(--muted);
+  font-size: 0.76rem;
+  margin-top: 16px;
+}
+
+.metric-card strong {
+  font-size: 1.38rem;
+  margin-top: 5px;
+}
+
+.metric-card em {
+  color: var(--faint);
+  font-size: 0.78rem;
+  font-style: normal;
+  margin-top: 5px;
+}
+
+.section-heading {
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+
+.section-heading h2 {
+  font-size: 1rem;
+  margin: 2px 0 0;
+}
+
+.panel,
+.chart-panel {
+  margin-top: 14px;
+  padding: 16px;
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.dashboard-grid--wide {
+  grid-template-columns: minmax(0, 1.55fr) minmax(300px, 0.7fr);
+}
+
+.dashboard-chargers-panel {
+  margin-top: 0;
+}
+
+.dashboard-chargers-panel .charger-map {
+  grid-template-columns: repeat(4, minmax(230px, 1fr));
+}
+
+.dashboard-grid--charts {
+  margin-top: 14px;
+}
+
+.dashboard-grid--charts .chart-panel {
+  margin-top: 0;
+}
+
+.chart-box {
+  height: 270px;
+}
+

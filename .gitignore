@@ -9,3 +9,4 @@ tmp
 _doc_analysis
 coverage
 .DS_Store
+*.tsbuildinfo

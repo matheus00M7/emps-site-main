@@ -1,5 +1,16 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "@/styles/tokens.css";
+import "@/styles/base.css";
+import "@/styles/shell.css";
+import "@/styles/dashboard.css";
+import "@/styles/charger-board.css";
+import "@/styles/shared-panels.css";
+import "@/styles/operational-pages.css";
+import "@/styles/settings.css";
+import "@/styles/login.css";
+import "@/styles/animations.css";
+import "@/styles/responsive.css";
 
 export const metadata: Metadata = {
   title: {

@@ -7,13 +7,20 @@ import {
   dashboardData,
   payments,
   sessions,
-} from "@/lib/mock-data";
+} from "@/data/mock/emps-mock-data";
 import {
   ApiResource,
+  ChargerCommand,
   DashboardData,
   FrontSession,
+  ManualReleaseRequest,
+  ManualReleaseResult,
+  PostpaidReleaseRequest,
+  PostpaidReleaseResult,
+  PostpaidSettlementRequest,
+  PostpaidSettlementResult,
   ResourceRow,
-} from "@/lib/domain";
+} from "@/domain/emps";
 
 const SESSION_KEY = "emps_front_session";
 
@@ -106,8 +113,83 @@ export const api = {
     return { ok: true, carregadorId, queued: true };
   },
 
+  async sendChargerCommand(carregadorId: string, command: ChargerCommand) {
+    await wait(140);
+    return { ok: true, carregadorId, command, processedAt: new Date().toISOString() };
+  },
+
   async registerPayment(pagamentoId: string) {
     await wait(120);
     return { ok: true, pagamentoId, status: "aprovado" as const };
   },
+
+  async releaseChargerManually(
+    request: ManualReleaseRequest
+  ): Promise<ManualReleaseResult> {
+    await wait(180);
+
+    if (request.valorRecebido <= 0 || request.tarifaKwh <= 0) {
+      throw new Error("Informe um valor recebido valido para liberar energia.");
+    }
+
+    return {
+      ok: true,
+      liberacaoId: `manual_${Date.now()}`,
+      sessaoId: `ses_manual_${Date.now()}`,
+      carregadorId: request.carregadorId,
+      chargerStatus: "em_uso",
+      valorRecebido: request.valorRecebido,
+      energiaLiberadaKwh: Number(
+        (request.valorRecebido / request.tarifaKwh).toFixed(2)
+      ),
+      status: "liberacao_manual_confirmada",
+    };
+  },
+
+  async startPostpaidCashSession(
+    request: PostpaidReleaseRequest
+  ): Promise<PostpaidReleaseResult> {
+    await wait(180);
+
+    if (request.tarifaKwh <= 0) {
+      throw new Error("Tarifa invalida para iniciar conta em aberto.");
+    }
+
+    const startedAt = new Date().toISOString();
+
+    return {
+      ok: true,
+      liberacaoId: `postpaid_${Date.now()}`,
+      sessaoId: `ses_postpaid_${Date.now()}`,
+      carregadorId: request.carregadorId,
+      chargerStatus: "em_uso",
+      tarifaKwh: request.tarifaKwh,
+      startedAt,
+      status: "sessao_pos_paga_iniciada",
+    };
+  },
+
+  async settlePostpaidCashSession(
+    request: PostpaidSettlementRequest
+  ): Promise<PostpaidSettlementResult> {
+    await wait(180);
+
+    if (request.valorRecebido < request.valorCobrado) {
+      throw new Error("Valor recebido menor que o total da sessao.");
+    }
+
+    return {
+      ok: true,
+      sessaoId: request.sessaoId,
+      carregadorId: request.carregadorId,
+      chargerStatus: "disponivel",
+      energiaConsumidaKwh: request.energiaConsumidaKwh,
+      valorCobrado: request.valorCobrado,
+      valorRecebido: request.valorRecebido,
+      troco: Number((request.valorRecebido - request.valorCobrado).toFixed(2)),
+      processedAt: new Date().toISOString(),
+      status: "sessao_pos_paga_finalizada",
+    };
+  },
 };
+

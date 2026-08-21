@@ -12,7 +12,7 @@ import {
   Smartphone,
   X,
 } from "lucide-react";
-import { api } from "@/services/api";
+import { api } from "@/services/emps-api";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -138,3 +138,4 @@ export default function LoginPage() {
     </main>
   );
 }
+

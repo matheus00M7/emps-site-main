@@ -1,23 +1,14 @@
-"use client";
-
 import {
   AlertTriangle,
   BatteryCharging,
-  CheckCircle2,
   CreditCard,
-  Filter,
   PlugZap,
-  RefreshCw,
-  Search,
-  Settings2,
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { ReactNode, useEffect, useMemo, useState } from "react";
-import { AppShell } from "@/components/AppShell";
-import { ChargerVisualBoard } from "@/components/ChargerVisualBoard";
-import { StatusBadge } from "@/components/StatusBadge";
-import {
+import type { ReactNode } from "react";
+import { StatusBadge } from "@/components/status/StatusBadge";
+import type {
   Alert,
   ApiResource,
   Charger,
@@ -25,7 +16,7 @@ import {
   Client,
   Payment,
   ResourceRow,
-} from "@/lib/domain";
+} from "@/domain/emps";
 import {
   formatCurrency,
   formatDateTime,
@@ -33,10 +24,9 @@ import {
   formatKw,
   formatMinutes,
   normalizeText,
-} from "@/lib/formatters";
-import { api } from "@/services/api";
+} from "@/utils/formatters";
 
-type ResourceConfig = {
+export type ResourceConfig = {
   title: string;
   eyebrow: string;
   description: string;
@@ -44,13 +34,13 @@ type ResourceConfig = {
   filters: Array<{ label: string; value: string }>;
 };
 
-type Column = {
+export type OperationColumn = {
   label: string;
   className?: string;
   render: (row: ResourceRow) => ReactNode;
 };
 
-const configs: Record<ApiResource, ResourceConfig> = {
+export const operationConfigs: Record<ApiResource, ResourceConfig> = {
   carregadores: {
     title: "Carregadores",
     eyebrow: "EMPS / Infraestrutura",
@@ -116,7 +106,7 @@ const configs: Record<ApiResource, ResourceConfig> = {
   },
 };
 
-const columns: Record<ApiResource, Column[]> = {
+export const operationColumns: Record<ApiResource, OperationColumn[]> = {
   carregadores: [
     {
       label: "Carregador",
@@ -304,7 +294,7 @@ const columns: Record<ApiResource, Column[]> = {
   ],
 };
 
-function rowStatus(resource: ApiResource, row: ResourceRow) {
+export function getRowStatus(resource: ApiResource, row: ResourceRow) {
   if (resource === "carregadores") return (row as Charger).status;
   if (resource === "sessoes") return (row as ChargingSession).status;
   if (resource === "pagamentos") return (row as Payment).status;
@@ -315,7 +305,7 @@ function rowStatus(resource: ApiResource, row: ResourceRow) {
   return (row as Client).status;
 }
 
-function rowKey(resource: ApiResource, row: ResourceRow) {
+export function getRowKey(resource: ApiResource, row: ResourceRow) {
   if (resource === "carregadores") return (row as Charger).carregadorId;
   if (resource === "sessoes") return (row as ChargingSession).sessaoId;
   if (resource === "pagamentos") return (row as Payment).pagamentoId;
@@ -323,11 +313,11 @@ function rowKey(resource: ApiResource, row: ResourceRow) {
   return (row as Client).usuarioId;
 }
 
-function rowSearchText(row: ResourceRow) {
+export function getRowSearchText(row: ResourceRow) {
   return normalizeText(Object.values(row).join(" "));
 }
 
-function actionLabel(resource: ApiResource, row: ResourceRow) {
+export function getActionLabel(resource: ApiResource, row: ResourceRow) {
   if (resource === "carregadores") return "Solicitar leitura";
   if (resource === "sessoes" && (row as ChargingSession).status === "ativa") {
     return "Finalizar";
@@ -339,193 +329,4 @@ function actionLabel(resource: ApiResource, row: ResourceRow) {
     return "Resolver";
   }
   return null;
-}
-
-export function OperationalPage({ resource }: { resource: ApiResource }) {
-  const config = configs[resource];
-  const Icon = config.icon;
-  const [rows, setRows] = useState<ResourceRow[]>([]);
-  const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("todos");
-  const [loading, setLoading] = useState(true);
-  const [notice, setNotice] = useState("");
-
-  async function load() {
-    setLoading(true);
-    setRows(await api.list(resource));
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    load();
-  }, [resource]);
-
-  const filteredRows = useMemo(() => {
-    const normalizedQuery = normalizeText(query);
-    return rows.filter((row) => {
-      const matchesFilter =
-        filter === "todos" || normalizeText(rowStatus(resource, row)).includes(filter);
-      const matchesQuery = !normalizedQuery || rowSearchText(row).includes(normalizedQuery);
-      return matchesFilter && matchesQuery;
-    });
-  }, [filter, query, resource, rows]);
-
-  async function runAction(row: ResourceRow) {
-    const key = rowKey(resource, row);
-
-    if (resource === "carregadores") {
-      await api.requestChargerStatus(key);
-      setNotice("Leitura do carregador adicionada a fila do backend.");
-    }
-
-    if (resource === "sessoes") {
-      await api.finishSession(key);
-      setRows((current) =>
-        current.map((item) =>
-          rowKey(resource, item) === key
-            ? ({ ...item, status: "finalizada", dataFim: new Date().toISOString() } as ResourceRow)
-            : item
-        )
-      );
-      setNotice("Sessao finalizada no modo visual.");
-    }
-
-    if (resource === "pagamentos") {
-      await api.registerPayment(key);
-      setRows((current) =>
-        current.map((item) =>
-          rowKey(resource, item) === key
-            ? ({ ...item, status: "aprovado", dataPagamento: new Date().toISOString() } as ResourceRow)
-            : item
-        )
-      );
-      setNotice("Pagamento aprovado no modo visual.");
-    }
-
-    if (resource === "alertas") {
-      await api.resolveAlert(key);
-      setRows((current) =>
-        current.map((item) =>
-          rowKey(resource, item) === key
-            ? ({ ...item, status: "resolvido" } as ResourceRow)
-            : item
-        )
-      );
-      setNotice("Alerta resolvido no modo visual.");
-    }
-
-    window.setTimeout(() => setNotice(""), 2200);
-  }
-
-  return (
-    <AppShell
-      eyebrow={config.eyebrow}
-      title={config.title}
-      description={config.description}
-      actions={
-        <button className="button button--ghost" onClick={load}>
-          <RefreshCw size={15} aria-hidden="true" />
-          Atualizar
-        </button>
-      }
-    >
-      {notice && (
-        <div className="toast" role="status">
-          <CheckCircle2 size={16} aria-hidden="true" />
-          {notice}
-        </div>
-      )}
-
-      <section className="resource-toolbar" aria-label={`Filtros de ${config.title}`}>
-        <div className="resource-title">
-          <span className="metric-icon metric-icon--cyan">
-            <Icon size={19} aria-hidden="true" />
-          </span>
-          <div>
-            <strong>{rows.length} registros</strong>
-            <small>Contrato canônico do front EMPS</small>
-          </div>
-        </div>
-
-        <label className="search-field">
-          <Search size={16} aria-hidden="true" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Buscar por ID, nome, status ou origem"
-          />
-        </label>
-
-        <div className="filter-tabs" role="tablist" aria-label="Filtro de status">
-          <Filter size={15} aria-hidden="true" />
-          {config.filters.map((item) => (
-            <button
-              key={item.value}
-              className={filter === item.value ? "active" : ""}
-              onClick={() => setFilter(item.value)}
-              type="button"
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {resource === "carregadores" && !loading && (
-        <ChargerVisualBoard chargers={filteredRows as Charger[]} compact />
-      )}
-
-      <section className="panel table-panel">
-        {loading ? (
-          <div className="loading-panel">
-            <RefreshCw className="spin" size={20} aria-hidden="true" />
-            Carregando {config.title.toLowerCase()}
-          </div>
-        ) : filteredRows.length === 0 ? (
-          <div className="empty-state">
-            <Settings2 size={22} aria-hidden="true" />
-            <strong>Nenhum registro encontrado</strong>
-            <small>Ajuste a busca ou selecione outro filtro.</small>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  {columns[resource].map((column) => (
-                    <th key={column.label}>{column.label}</th>
-                  ))}
-                  <th>Acao</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRows.map((row) => {
-                  const action = actionLabel(resource, row);
-                  return (
-                    <tr key={rowKey(resource, row)}>
-                      {columns[resource].map((column) => (
-                        <td key={column.label} className={column.className}>
-                          {column.render(row)}
-                        </td>
-                      ))}
-                      <td>
-                        {action ? (
-                          <button className="table-action" onClick={() => runAction(row)}>
-                            <CheckCircle2 size={14} aria-hidden="true" />
-                            {action}
-                          </button>
-                        ) : (
-                          <span className="muted-text">Sem acao</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-    </AppShell>
-  );
 }

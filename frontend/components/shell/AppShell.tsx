@@ -1,67 +1,18 @@
 "use client";
 
 import {
-  AlertTriangle,
-  BarChart3,
-  BatteryCharging,
-  Bell,
-  Building2,
-  ChartPie,
-  CreditCard,
-  HeartPulse,
-  HousePlug,
-  LayoutDashboard,
-  LogOut,
   Menu,
-  PlugZap,
-  Settings,
-  Siren,
-  Users,
-  Waypoints,
   X,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
-import { frontSession } from "@/services/api";
-
-type NavItem = {
-  label: string;
-  href: string;
-  icon: LucideIcon;
-};
-
-type ShellItem = {
-  label: string;
-  icon: LucideIcon;
-};
-
-const semsRailItems: ShellItem[] = [
-  { label: "Painel SEMS+", icon: HousePlug },
-  { label: "Dispositivos", icon: Waypoints },
-  { label: "Alarmes", icon: Siren },
-  { label: "Usinas", icon: Building2 },
-  { label: "Analises", icon: ChartPie },
-  { label: "Centro de servico", icon: HeartPulse },
-];
-
-const empsItems: NavItem[] = [
-  { label: "Painel", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Configuracoes EMPS", href: "/settings", icon: Settings },
-  { label: "Carregadores", href: "/chargers", icon: PlugZap },
-  { label: "Sessoes", href: "/sessions", icon: BatteryCharging },
-  { label: "Pagamentos", href: "/payments", icon: CreditCard },
-  { label: "Clientes", href: "/clients", icon: Users },
-  { label: "Alertas", href: "/alerts", icon: AlertTriangle },
-];
-
-const topTabs = [
-  { label: "Painel", href: "/dashboard" },
-  { label: "Dispositivos", href: "/chargers" },
-  { label: "Alarmes", href: "/alerts" },
-];
+import {
+  empsNavigationItems,
+  semsSidebarItems,
+  semsToolbarItems,
+} from "@/components/shell/shell-navigation";
 
 function EmpsLogo({ compact = false }: { compact?: boolean }) {
   return (
@@ -101,35 +52,21 @@ export function AppShell({
   title,
   description,
   children,
-  actions,
 }: {
   eyebrow: string;
   title: string;
   description?: string;
   children: ReactNode;
-  actions?: ReactNode;
 }) {
   const pathname = usePathname();
-  const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [empsMenuOpen, setEmpsMenuOpen] = useState(false);
-  const [operatorName, setOperatorName] = useState("Administrador EMPS");
   const breadcrumb = eyebrow.startsWith("SEMS+") ? eyebrow : `SEMS+ / ${eyebrow}`;
-
-  useEffect(() => {
-    const session = frontSession.get();
-    if (session) setOperatorName(session.nome);
-  }, []);
 
   useEffect(() => {
     setMenuOpen(false);
     setEmpsMenuOpen(false);
   }, [pathname]);
-
-  function logout() {
-    frontSession.clear();
-    router.push("/login");
-  }
 
   return (
     <div className="app-shell">
@@ -159,7 +96,7 @@ export function AppShell({
         <nav className="nav-list" aria-label="Navegacao principal">
           <div className="nav-section">
             <span className="nav-section-label">SEMS+</span>
-            {semsRailItems.map((item) => {
+            {semsSidebarItems.map((item) => {
               const Icon = item.icon;
               return (
                 <button
@@ -199,7 +136,7 @@ export function AppShell({
         {empsMenuOpen && (
           <div className="emps-popover" role="dialog" aria-label="Modulo EMPS">
             <div className="emps-popover__list">
-              {empsItems.map((item) => {
+              {empsNavigationItems.map((item) => {
                 const Icon = item.icon;
                 return (
                   <Link
@@ -238,32 +175,26 @@ export function AppShell({
               <span>{breadcrumb}</span>
               <h1>{title}</h1>
               {description && <p>{description}</p>}
-              <div className="topbar-tabs" aria-label="Navegacao do modulo EMPS">
-                {topTabs.map((item) => (
-                  <Link
-                    className={isActive(pathname, item.href) ? "active" : ""}
-                    href={item.href}
-                    key={item.href}
-                  >
-                    {item.label}
-                  </Link>
-                ))}
-              </div>
             </div>
           </div>
 
-          <div className="topbar-actions">
-            {actions}
-            <span className="contract-pill">
-              <BarChart3 size={14} aria-hidden="true" />
-              Modulo EMPS
-            </span>
-            <button className="icon-button" aria-label="Notificacoes" title="Notificacoes">
-              <Bell size={18} />
-            </button>
-            <button className="operator-button" onClick={logout} title="Sair">
-              <span>{operatorName.slice(0, 2).toUpperCase()}</span>
-              <LogOut size={15} aria-hidden="true" />
+          <div className="topbar-actions" aria-label="Acoes SEMS+">
+            {semsToolbarItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  className="sems-top-action"
+                  key={item.label}
+                  type="button"
+                  aria-label={item.label}
+                  title={item.label}
+                >
+                  <Icon size={19} aria-hidden="true" />
+                </button>
+              );
+            })}
+            <button className="sems-profile-button" type="button" aria-label="Perfil" title="Perfil">
+              <span>EM</span>
             </button>
           </div>
         </header>
@@ -273,3 +204,4 @@ export function AppShell({
     </div>
   );
 }
+
