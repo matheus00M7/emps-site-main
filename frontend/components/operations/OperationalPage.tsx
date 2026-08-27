@@ -4,7 +4,13 @@ import { CheckCircle2, Filter, RefreshCw, Search, Settings2 } from "lucide-react
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { ChargerVisualBoard } from "@/components/chargers/ChargerVisualBoard";
-import type { ApiResource, Charger, ResourceRow } from "@/domain/emps";
+import { EnergyFlowStation } from "@/components/energy/EnergyFlowStation";
+import type {
+  ApiResource,
+  Charger,
+  DashboardData,
+  ResourceRow,
+} from "@/domain/emps";
 import { normalizeText } from "@/utils/formatters";
 import { api } from "@/services/emps-api";
 import {
@@ -24,11 +30,22 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
   const [filter, setFilter] = useState("todos");
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
+  const [sessionEnergyContext, setSessionEnergyContext] =
+    useState<DashboardData | null>(null);
 
   async function load() {
     setLoading(true);
-    setRows(await api.list(resource));
-    setLoading(false);
+    try {
+      const [nextRows, energyContext] = await Promise.all([
+        api.list(resource),
+        resource === "sessoes" ? api.dashboard() : Promise.resolve(null),
+      ]);
+
+      setRows(nextRows);
+      setSessionEnergyContext(energyContext);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -97,6 +114,7 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
       eyebrow={config.eyebrow}
       title={config.title}
       description={config.description}
+      showEmpsHeaderLogo
     >
       {notice && (
         <div className="toast" role="status">
@@ -142,6 +160,13 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
 
       {resource === "carregadores" && !loading && (
         <ChargerVisualBoard chargers={filteredRows as Charger[]} compact />
+      )}
+
+      {resource === "sessoes" && !loading && sessionEnergyContext && (
+        <EnergyFlowStation
+          chargers={sessionEnergyContext.carregadores}
+          telemetry={sessionEnergyContext.energyFlow}
+        />
       )}
 
       <section className="panel table-panel">

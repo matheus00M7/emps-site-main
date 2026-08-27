@@ -18,10 +18,6 @@
     grid-template-columns: repeat(2, minmax(260px, 1fr));
   }
 
-  .charger-detail-panel dl {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .resource-toolbar {
     grid-template-columns: 1fr;
   }
@@ -125,6 +121,37 @@
 
   .dashboard-chargers-panel .charger-map {
     grid-template-columns: 1fr;
+  }
+
+  .charger-bay:nth-child(n) .charger-detail-panel {
+    bottom: auto;
+    left: 0;
+    right: auto;
+    top: calc(100% + 8px);
+    transform: translateY(12px) scale(0.96);
+    transform-origin: 50% 100%;
+    width: 100%;
+  }
+
+  .charger-bay:nth-child(n) .charger-detail-panel::after {
+    border-bottom: 8px solid color-mix(in srgb, var(--bay-color) 65%, #151a20);
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 0;
+    left: auto;
+    right: 14%;
+    top: -8px;
+  }
+
+  .charger-detail-panel dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .charger-bay:nth-child(n):has(.charger-card-action--details:hover)
+    .charger-detail-panel,
+  .charger-bay:nth-child(n):has(.charger-card-action--details:focus-visible)
+    .charger-detail-panel {
+    transform: translateY(0) scale(1);
   }
 
   .ev-car {

@@ -60,6 +60,7 @@ export default function SettingsPage() {
       eyebrow="SEMS+ / EMPS"
       title="Configuracoes do Eletroposto"
       description="Modulo EMPS dentro do SEMS+ para governanca, integracao e operacao do eletroposto."
+      showEmpsHeaderLogo
     >
       <section className="settings-grid">
         {settings.map((item) => {

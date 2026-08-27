@@ -5,16 +5,20 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import type { LucideIcon } from "lucide-react";
 import {
+  Activity,
   Banknote,
+  Cable,
   CalendarClock,
-  ChevronDown,
   ClipboardCheck,
+  Clock3,
   Gauge,
   Info,
   Loader2,
   Power,
+  Radio,
   RefreshCw,
   RotateCcw,
+  ShieldCheck,
   Unplug,
   Wrench,
   X,
@@ -148,11 +152,20 @@ function chargerOperationalLine(charger: Charger) {
   return "Pronto para uso...";
 }
 
-function chargerEnergySource(charger: Charger) {
-  if (charger.status === "em_uso") return "Solar + bateria + rede";
-  if (charger.status === "disponivel") return "Rede pronta";
-  if (charger.status === "manutencao") return "Circuito em verificacao";
-  return "Fonte indisponivel";
+function chargerRecommendedAction(charger: Charger) {
+  if (charger.status === "em_uso") {
+    return "Acompanhar potencia e encerramento da sessao.";
+  }
+
+  if (charger.status === "manutencao") {
+    return "Concluir o checklist antes de uma nova liberacao.";
+  }
+
+  if (charger.status === "offline" || charger.status === "erro") {
+    return "Isolar o conector e encaminhar para manutencao.";
+  }
+
+  return "Disponivel para iniciar uma nova sessao.";
 }
 
 function chargerMetricFallback(value: number | null, suffix = "") {
@@ -176,6 +189,7 @@ function ChargerScene({ charger }: { charger: Charger }) {
         className={visual.asset.className}
         draggable={false}
         height={visual.asset.height}
+        loading="eager"
         src={visual.asset.src}
         width={visual.asset.width}
       />
@@ -610,6 +624,10 @@ export function ChargerVisualBoard({
             charger.energiaHojeKwh + (postpaidUsage?.energiaConsumidaKwh ?? 0);
           const displayedRevenue =
             charger.receitaHoje + (postpaidUsage?.valorCobrado ?? 0);
+          const occupancyAngle = Math.min(
+            360,
+            Math.max(0, charger.ocupacaoHojePercent * 3.6)
+          );
           const detailAction: ChargerCardAction = {
             className: "charger-card-action--details",
             icon: Info,
@@ -827,6 +845,11 @@ export function ChargerVisualBoard({
 
                   return (
                     <button
+                      aria-describedby={
+                        action.key === "detalhes"
+                          ? `charger-details-${charger.carregadorId}`
+                          : undefined
+                      }
                       aria-expanded={action.isActive}
                       className={`charger-card-action${
                         action.className ? ` ${action.className}` : ""
@@ -843,9 +866,6 @@ export function ChargerVisualBoard({
                         <ActionIcon size={13} aria-hidden="true" />
                       )}
                       {action.label}
-                      {action.key === "detalhes" && (
-                        <ChevronDown size={12} aria-hidden="true" />
-                      )}
                     </button>
                   );
                 })}
@@ -1032,37 +1052,104 @@ export function ChargerVisualBoard({
                   {currentManualReleaseMessage.text}
                 </p>
               )}
-              <div className="charger-detail-panel">
-                <dl>
+              <div
+                className="charger-detail-panel"
+                id={`charger-details-${charger.carregadorId}`}
+                role="tooltip"
+              >
+                <div className="charger-detail-panel__head">
+                  <span>
+                    <Radio size={12} aria-hidden="true" />
+                    <i aria-hidden="true" />
+                    Inspetor operacional
+                  </span>
+                  <strong>{visual.label}</strong>
+                </div>
+                <div className="charger-detail-panel__body">
+                  <div
+                    className="charger-detail-occupancy"
+                    style={{
+                      background: `conic-gradient(var(--bay-color) ${occupancyAngle}deg, #ffffff12 0deg)`,
+                    }}
+                  >
+                    <span>
+                      <strong>{charger.ocupacaoHojePercent}%</strong>
+                      <small>Ocupacao</small>
+                    </span>
+                  </div>
+                  <dl>
+                    <div className="charger-detail-metric">
+                      <dt>
+                        <Zap size={12} aria-hidden="true" />
+                        Potencia atual
+                      </dt>
+                      <dd>
+                        {formatKw(charger.potenciaAtualKw)}
+                        <small>Max. {formatKw(charger.potenciaMaximaKw)}</small>
+                      </dd>
+                    </div>
+                    <div className="charger-detail-metric">
+                      <dt>
+                        <Activity size={12} aria-hidden="true" />
+                        Sessoes hoje
+                      </dt>
+                      <dd>{charger.sessoesHoje}</dd>
+                    </div>
+                    <div className="charger-detail-metric">
+                      <dt>
+                        <Zap size={12} aria-hidden="true" />
+                        Energia hoje
+                      </dt>
+                      <dd>{formatKwh(displayedEnergyToday)}</dd>
+                    </div>
+                    <div className="charger-detail-metric">
+                      <dt>
+                        <Cable size={12} aria-hidden="true" />
+                        Conector
+                      </dt>
+                      <dd>{charger.tipoConector}</dd>
+                    </div>
+                  </dl>
+                </div>
+                <div className="charger-detail-panel__session">
+                  <span>
+                    <Clock3 size={12} aria-hidden="true" />
+                    Media por sessao
+                  </span>
+                  <strong>{charger.tempoMedioSessaoMinutos} min</strong>
+                  <i aria-hidden="true">
+                    <b
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.max(8, charger.ocupacaoHojePercent)
+                        )}%`,
+                      }}
+                    />
+                  </i>
+                </div>
+                <div className="charger-detail-panel__insights">
                   <div>
-                    <dt>Sessoes hoje</dt>
-                    <dd>{charger.sessoesHoje}</dd>
+                    <Info size={14} aria-hidden="true" />
+                    <span>
+                      <small>{detailReason.label}</small>
+                      <strong>{detailReason.value}</strong>
+                    </span>
                   </div>
                   <div>
-                    <dt>Ocupacao</dt>
-                    <dd>{charger.ocupacaoHojePercent}%</dd>
+                    <ShieldCheck size={14} aria-hidden="true" />
+                    <span>
+                      <small>Proxima acao</small>
+                      <strong>{chargerRecommendedAction(charger)}</strong>
+                    </span>
                   </div>
-                  <div>
-                    <dt>Media por sessao</dt>
-                    <dd>{charger.tempoMedioSessaoMinutos} min</dd>
-                  </div>
-                  <div>
-                    <dt>Conector</dt>
-                    <dd>{charger.tipoConector}</dd>
-                  </div>
-                  <div>
-                    <dt>Pico</dt>
-                    <dd>{formatKw(charger.potenciaMaximaKw)}</dd>
-                  </div>
-                  <div>
-                    <dt>Fonte</dt>
-                    <dd>{chargerEnergySource(charger)}</dd>
-                  </div>
-                  <div className="charger-detail-panel__wide">
-                    <dt>{detailReason.label}</dt>
-                    <dd>{detailReason.value}</dd>
-                  </div>
-                </dl>
+                </div>
+                <footer className="charger-detail-panel__footer">
+                  <span>Ultimo sinal</span>
+                  <time dateTime={charger.ultimaComunicacao}>
+                    {formatDateTime(charger.ultimaComunicacao)}
+                  </time>
+                </footer>
               </div>
               <small className="charger-bay__sync">
                 Sync {formatDateTime(charger.ultimaComunicacao)}

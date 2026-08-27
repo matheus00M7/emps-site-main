@@ -5,6 +5,7 @@ import "@/styles/base.css";
 import "@/styles/shell.css";
 import "@/styles/dashboard.css";
 import "@/styles/charger-board.css";
+import "@/styles/energy-flow.css";
 import "@/styles/shared-panels.css";
 import "@/styles/operational-pages.css";
 import "@/styles/settings.css";

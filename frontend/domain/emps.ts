@@ -172,6 +172,19 @@ export type TelemetryPoint = {
   sessoes: number;
 };
 
+export type ChargerEnergySource = "grid" | "solar" | "battery";
+
+export type EnergyFlowTelemetry = {
+  batteryMode: "charging" | "discharging" | "idle" | "unknown";
+  batteryPowerKw: number | null;
+  chargerPowerKw: number | null;
+  chargerSources: ChargerEnergySource[];
+  gridPowerKw: number | null;
+  solarChargingBattery: boolean;
+  solarPowerKw: number | null;
+  updatedAt: string | null;
+};
+
 export type DashboardSummary = {
   receitaHoje: number;
   receitaMes: number;
@@ -195,6 +208,7 @@ export type DashboardData = {
   resumo: DashboardSummary;
   receitaPorHora: TelemetryPoint[];
   energiaPorHora: TelemetryPoint[];
+  energyFlow: EnergyFlowTelemetry;
   carregadores: Charger[];
   sessoes: ChargingSession[];
   pagamentos: Payment[];
