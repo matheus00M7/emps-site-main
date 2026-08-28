@@ -43,7 +43,7 @@ function MenuRow({ icon: Icon, title, subtitle, onPress, danger }: MenuRowProps)
 }
 
 export default function ProfileScreen() {
-  const { user, logout } = useApp();
+  const { isDemoMode, user, logout } = useApp();
   const initials = user?.name
     .split(' ')
     .slice(0, 2)
@@ -102,7 +102,9 @@ export default function ProfileScreen() {
             <MenuRow danger icon={LogOut} onPress={confirmLogout} title="Sair da conta" />
           </View>
 
-          <Text style={styles.version}>EMPS Charge · versão demonstrativa 1.0.0</Text>
+          <Text style={styles.version}>
+            EMPS Charge · {isDemoMode ? 'modo demonstração' : 'conectado à EMPS'} · 1.0.0
+          </Text>
         </View>
       </ScrollView>
     </SafeAreaView>

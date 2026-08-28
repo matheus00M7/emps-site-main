@@ -14,6 +14,7 @@ import { StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { LogoMark } from '@/components/brand';
+import { PaymentProvider } from '@/components/payment-provider';
 import { Colors } from '@/constants/theme';
 import { AppProvider, useApp } from '@/context/app-context';
 
@@ -81,9 +82,11 @@ function Navigation() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
-      <AppProvider>
-        <Navigation />
-      </AppProvider>
+      <PaymentProvider>
+        <AppProvider>
+          <Navigation />
+        </AppProvider>
+      </PaymentProvider>
     </GestureHandlerRootView>
   );
 }

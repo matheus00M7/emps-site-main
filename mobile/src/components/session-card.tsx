@@ -2,11 +2,12 @@ import { BatteryCharging, ChevronRight, CircleCheck, Clock3, MapPin } from 'luci
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Fonts, Radius } from '@/constants/theme';
-import { getCharger, getStation } from '@/data/mock-data';
+import { useApp } from '@/context/app-context';
 import type { ChargingSession } from '@/domain/models';
 import { formatCurrency, formatDate, formatEnergy } from '@/utils/formatters';
 
 export function SessionCard({ session, onPress }: { session: ChargingSession; onPress?: () => void }) {
+  const { getCharger, getStation } = useApp();
   const station = getStation(session.stationId);
   const charger = getCharger(session.chargerId);
   const isActive = session.status === 'charging';

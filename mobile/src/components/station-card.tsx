@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { StatusPill } from '@/components/ui/status-pill';
 import { Colors, Fonts, Radius, Shadow } from '@/constants/theme';
-import { getStationChargers } from '@/data/mock-data';
+import { useApp } from '@/context/app-context';
 import type { Station } from '@/domain/models';
 import { formatDistance } from '@/utils/formatters';
 
@@ -14,10 +14,19 @@ type StationCardProps = {
 };
 
 export function StationCard({ station, distanceKm, onPress }: StationCardProps) {
+  const { getStationChargers } = useApp();
   const stationChargers = getStationChargers(station.id);
   const available = stationChargers.filter((charger) => charger.status === 'available').length;
   const bestCharger =
     stationChargers.find((charger) => charger.status === 'available') ?? stationChargers[0];
+  const maximumPower =
+    stationChargers.length > 0
+      ? Math.max(...stationChargers.map((item) => item.powerKw))
+      : null;
+  const minimumPrice =
+    stationChargers.length > 0
+      ? Math.min(...stationChargers.map((item) => item.pricePerKwh))
+      : null;
   const availableLabel = `${available} ${available === 1 ? 'carregador disponível' : 'carregadores disponíveis'}`;
 
   return (
@@ -46,9 +55,11 @@ export function StationCard({ station, distanceKm, onPress }: StationCardProps) 
         <StatusPill status={available > 0 ? 'available' : bestCharger?.status ?? 'offline'} compact />
         <Text style={styles.detail}>{available}/{stationChargers.length} livres</Text>
         <View style={styles.dot} />
-        <Text style={styles.detail}>até {Math.max(...stationChargers.map((item) => item.powerKw))} kW</Text>
+        <Text style={styles.detail}>{maximumPower ? `até ${maximumPower} kW` : 'consultando potência'}</Text>
         <Text style={styles.price}>
-          R$ {Math.min(...stationChargers.map((item) => item.pricePerKwh)).toFixed(2).replace('.', ',')}/kWh
+          {minimumPrice === null
+            ? 'tarifa indisponível'
+            : `R$ ${minimumPrice.toFixed(2).replace('.', ',')}/kWh`}
         </Text>
       </View>
     </Pressable>

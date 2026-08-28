@@ -1,12 +1,12 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, Download, Home, Share2, ShieldCheck } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
 import { Share, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/ui/app-button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Colors, Fonts, MaxContentWidth, Radius } from '@/constants/theme';
-import { getCharger, getStation } from '@/data/mock-data';
 import { useApp } from '@/context/app-context';
 import type { PaymentMethod } from '@/domain/models';
 import { formatCurrency, formatDate, formatDuration, formatEnergy } from '@/utils/formatters';
@@ -29,10 +29,32 @@ function ReceiptRow({ label, value, strong }: { label: string; value: string; st
 export default function ReceiptScreen() {
   const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
   const router = useRouter();
-  const { history } = useApp();
+  const { getCharger, getStation, history, isDemoMode, loadCharger } = useApp();
   const session = history.find((item) => item.id === sessionId);
   const charger = session ? getCharger(session.chargerId) : undefined;
   const station = session ? getStation(session.stationId) : undefined;
+  const [loadingEntities, setLoadingEntities] = useState(Boolean(session && (!charger || !station)));
+
+  useEffect(() => {
+    if (!session || (charger && station)) return;
+    let active = true;
+    loadCharger(session.chargerId)
+      .catch((error) => console.warn('[emps-api] dados do recibo indisponíveis', error))
+      .finally(() => active && setLoadingEntities(false));
+    return () => {
+      active = false;
+    };
+  }, [charger, loadCharger, session, station]);
+
+  if (session && loadingEntities && (!charger || !station)) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.missing}>
+          <Text style={styles.missingTitle}>Carregando recibo…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!session || !charger || !station) {
     return (
@@ -88,7 +110,14 @@ export default function ReceiptScreen() {
             <ReceiptRow label="Duração" value={formatDuration(session.durationSeconds)} />
             <ReceiptRow label="Energia entregue" value={formatEnergy(session.energyKwh)} />
             <ReceiptRow label="Tarifa" value={`${formatCurrency(charger.pricePerKwh)}/kWh`} />
-            <ReceiptRow label="Forma de pagamento" value={PAYMENT_LABELS[session.paymentMethod]} />
+            <ReceiptRow
+              label="Forma de pagamento"
+              value={
+                session.paymentMethod === 'card' && !isDemoMode
+                  ? 'Cartão'
+                  : PAYMENT_LABELS[session.paymentMethod]
+              }
+            />
             <View style={styles.separator} />
             <ReceiptRow label="Total pago" strong value={formatCurrency(session.totalCost)} />
             <View style={styles.transactionBox}>
@@ -99,7 +128,11 @@ export default function ReceiptScreen() {
 
           <View style={styles.demoNote}>
             <Download color={Colors.yellow} size={16} />
-            <Text style={styles.demoNoteText}>Recibo demonstrativo. O documento fiscal será gerado pelo backend e pelo provedor de pagamento real.</Text>
+            <Text style={styles.demoNoteText}>
+              {isDemoMode
+                ? 'Recibo demonstrativo. Nenhum documento fiscal real foi emitido.'
+                : 'Recibo sincronizado com a sessão e o pagamento registrados pela EMPS.'}
+            </Text>
           </View>
 
           <AppButton icon={<Share2 color={Colors.white} size={18} />} onPress={shareReceipt} title="Compartilhar recibo" />

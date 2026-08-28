@@ -120,11 +120,20 @@ function DashboardSkeleton() {
 export function AdminDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   async function load() {
     setLoading(true);
+    setError("");
     try {
       setData(await api.dashboard());
+    } catch (loadError) {
+      setData(null);
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Nao foi possivel carregar o painel EMPS."
+      );
     } finally {
       setLoading(false);
     }
@@ -145,8 +154,17 @@ export function AdminDashboard() {
       showEmpsHeaderLogo
       title="Painel do Eletroposto"
     >
-      {loading || !data ? (
+      {loading ? (
         <DashboardSkeleton />
+      ) : error || !data ? (
+        <div className="loading-panel" role="alert">
+          <AlertTriangle size={20} aria-hidden="true" />
+          <span>{error || "A API nao devolveu os dados do painel."}</span>
+          <button className="table-action" onClick={() => void load()} type="button">
+            <RefreshCw size={14} aria-hidden="true" />
+            Tentar novamente
+          </button>
+        </div>
       ) : (
         <>
           <section className="panel dashboard-chargers-panel">

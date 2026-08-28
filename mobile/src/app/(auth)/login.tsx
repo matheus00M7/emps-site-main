@@ -23,10 +23,10 @@ import { useApp } from '@/context/app-context';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { chargerId } = useLocalSearchParams<{ chargerId?: string }>();
-  const { login } = useApp();
-  const [email, setEmail] = useState('motorista@emps.com');
-  const [password, setPassword] = useState('emps123');
+  const { chargerId, qrToken } = useLocalSearchParams<{ chargerId?: string; qrToken?: string }>();
+  const { isDemoMode, login } = useApp();
+  const [email, setEmail] = useState(isDemoMode ? 'motorista@emps.com' : '');
+  const [password, setPassword] = useState(isDemoMode ? 'emps123' : '');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -36,7 +36,8 @@ export default function LoginScreen() {
     try {
       await login(email, password);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (chargerId) router.replace(`/charger/${chargerId}`);
+      if (qrToken) router.replace(`/c/${encodeURIComponent(qrToken)}`);
+      else if (chargerId) router.replace(`/charger/${chargerId}`);
     } catch (loginError) {
       setError(loginError instanceof Error ? loginError.message : 'Não foi possível entrar.');
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -98,13 +99,15 @@ export default function LoginScreen() {
                 />
 
                 <View style={styles.options}>
-                  <Text style={styles.demoText}>Acesso demonstrativo preenchido</Text>
+                  <Text style={styles.demoText}>
+                    {isDemoMode ? 'Acesso demonstrativo preenchido' : 'Acesso protegido pela EMPS'}
+                  </Text>
                   <Pressable
                     accessibilityRole="button"
                     onPress={() =>
                       Alert.alert(
                         'Recuperar senha',
-                        'A recuperação por e-mail será ativada junto com a API de autenticação.',
+                        'Entre em contato com o suporte EMPS para recuperar seu acesso.',
                       )
                     }>
                     <Text style={styles.linkText}>Esqueci a senha</Text>
@@ -118,7 +121,9 @@ export default function LoginScreen() {
                   <Text style={styles.muted}>Ainda não tem uma conta?</Text>
                   <Link
                     href={
-                      chargerId
+                      qrToken
+                        ? { pathname: '/register', params: { qrToken } }
+                        : chargerId
                         ? { pathname: '/register', params: { chargerId } }
                         : { pathname: '/register' }
                     }

@@ -1,27 +1,13 @@
 import { Tabs, useRouter } from 'expo-router';
-import {
-  BottomTabBar,
-  type BottomTabBarProps,
-} from 'expo-router/build/react-navigation/bottom-tabs';
 import { History, Home, ScanLine, UserRound } from 'lucide-react-native';
-import { View } from 'react-native';
 
 import { Colors, Fonts } from '@/constants/theme';
-
-function EmpsTabBar(props: BottomTabBarProps) {
-  return (
-    <View accessibilityLabel="Navegação principal" role="navigation">
-      <BottomTabBar {...props} />
-    </View>
-  );
-}
 
 export default function TabsLayout() {
   const router = useRouter();
 
   return (
     <Tabs
-      tabBar={(props) => <EmpsTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         sceneStyle: { backgroundColor: Colors.background },

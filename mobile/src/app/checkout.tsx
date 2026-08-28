@@ -11,14 +11,13 @@ import {
   Zap,
 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
-import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/ui/app-button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Colors, Fonts, MaxContentWidth, Radius } from '@/constants/theme';
-import { getCharger, getStation } from '@/data/mock-data';
 import type { PaymentMethod } from '@/domain/models';
 import { useApp } from '@/context/app-context';
 import { formatCurrency } from '@/utils/formatters';
@@ -42,7 +41,15 @@ const LIMITS: (number | null)[] = [30, 50, 80, null];
 export default function CheckoutScreen() {
   const { chargerId } = useLocalSearchParams<{ chargerId: string }>();
   const router = useRouter();
-  const { activeSession, startSession } = useApp();
+  const {
+    activeSession,
+    getCharger,
+    getStation,
+    hasQrBinding,
+    isDemoMode,
+    loadCharger,
+    startSession,
+  } = useApp();
   const charger = getCharger(chargerId);
   const station = charger ? getStation(charger.stationId) : undefined;
   const [method, setMethod] = useState<PaymentMethod>('pix');
@@ -50,8 +57,34 @@ export default function CheckoutScreen() {
   const [loading, setLoading] = useState(false);
   const [loadingLabel, setLoadingLabel] = useState('Confirmar e iniciar');
   const [error, setError] = useState('');
+  const [entityLoading, setEntityLoading] = useState(!charger || !station);
+
+  useEffect(() => {
+    let active = true;
+    loadCharger(chargerId)
+      .catch((loadError) => {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Carregador não encontrado.');
+        }
+      })
+      .finally(() => active && setEntityLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [chargerId, loadCharger]);
 
   if (activeSession) return <Redirect href="/charging" />;
+
+  if ((!charger || !station) && entityLoading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.missing}>
+          <ActivityIndicator color={Colors.coral} />
+          <Text style={styles.missingTitle}>Preparando pagamento…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!charger || !station) {
     return (
@@ -59,6 +92,17 @@ export default function CheckoutScreen() {
         <View style={styles.missing}>
           <Text style={styles.missingTitle}>Não foi possível montar o pagamento.</Text>
           <AppButton onPress={() => router.replace('/')} title="Voltar ao início" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!isDemoMode && !hasQrBinding(charger.id)) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.missing}>
+          <Text style={styles.missingTitle}>Escaneie o QR da vaga antes do pagamento.</Text>
+          <AppButton onPress={() => router.replace('/scan')} title="Abrir leitor de QR" />
         </View>
       </SafeAreaView>
     );
@@ -93,10 +137,16 @@ export default function CheckoutScreen() {
           <PageHeader title="Pagamento" subtitle={`${station.name} · ${charger.bay}`} />
 
           <View style={styles.demoBanner}>
-            <Info color={Colors.yellow} size={17} />
+            <Info color={isDemoMode ? Colors.yellow : Colors.green} size={17} />
             <View style={styles.demoCopy}>
-              <Text style={styles.demoTitle}>Ambiente demonstrativo</Text>
-              <Text style={styles.demoText}>Nenhuma cobrança real será realizada nesta versão.</Text>
+              <Text style={[styles.demoTitle, !isDemoMode && styles.connectedTitle]}>
+                {isDemoMode ? 'Ambiente demonstrativo' : 'Pagamento protegido pela EMPS'}
+              </Text>
+              <Text style={styles.demoText}>
+                {isDemoMode
+                  ? 'Nenhuma cobrança real será realizada nesta versão.'
+                  : 'A autorização será confirmada pelo servidor antes de liberar o carregador.'}
+              </Text>
             </View>
           </View>
 
@@ -124,7 +174,15 @@ export default function CheckoutScreen() {
                       <Text style={styles.methodTitle}>{title}</Text>
                       {badge ? <View style={styles.badge}><Text style={styles.badgeText}>{badge}</Text></View> : null}
                     </View>
-                    <Text style={styles.methodSubtitle}>{subtitle}</Text>
+                    <Text style={styles.methodSubtitle}>
+                      {isDemoMode
+                        ? subtitle
+                        : id === 'card'
+                          ? 'Cartão cadastrado ou novo cartão'
+                          : id === 'wallet'
+                            ? 'Carteira disponível no aparelho'
+                            : subtitle}
+                    </Text>
                   </View>
                   <View style={[styles.radio, selected && styles.radioSelected]}>
                     {selected ? <Check color={Colors.white} size={13} strokeWidth={3} /> : null}
@@ -180,8 +238,8 @@ export default function CheckoutScreen() {
             <LockKeyhole color={Colors.green} size={17} />
             <Text style={styles.paymentNoteText}>
               {method === 'pix'
-                ? 'No produto real, o PIX cria crédito pré-pago e o saldo não usado é devolvido conforme as regras exibidas.'
-                : 'No produto real, será feita uma pré-autorização e apenas o valor consumido será capturado ao encerrar.'}
+                ? 'O PIX cria crédito pré-pago e o saldo não usado é devolvido conforme as regras exibidas.'
+                : 'Será feita uma pré-autorização e apenas o valor consumido será capturado ao encerrar.'}
             </Text>
           </View>
 
@@ -223,6 +281,7 @@ const styles = StyleSheet.create({
   },
   demoCopy: { flex: 1 },
   demoTitle: { color: Colors.yellow, fontFamily: Fonts.semiBold, fontSize: 10 },
+  connectedTitle: { color: Colors.green },
   demoText: { color: Colors.textMuted, fontFamily: Fonts.regular, fontSize: 8, marginTop: 2 },
   sectionTitle: { color: Colors.text, fontFamily: Fonts.semiBold, fontSize: 15, marginTop: 10 },
   methodList: { gap: 9 },

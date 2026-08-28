@@ -1,22 +1,23 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
-import { ChargerStatus, PaymentStatus, SessionStatus } from "@prisma/client";
-import { JwtGuard } from "./auth";
+import { ChargerStatus, PaymentStatus, Role, SessionStatus } from "@prisma/client";
+import { JwtGuard, Roles, RolesGuard } from "./auth";
 import { PrismaService } from "./prisma.service";
 
 const number = (value: unknown) => Number(value ?? 0);
 const startOfDay = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 const startOfMonth = () => { const d = new Date(); d.setDate(1); d.setHours(0, 0, 0, 0); return d; };
 
-@UseGuards(JwtGuard)
+@UseGuards(JwtGuard, RolesGuard)
+@Roles(Role.ADMIN, Role.OPERATOR)
 @Controller("dashboard")
 export class DashboardController {
   constructor(private prisma: PrismaService) {}
   @Get("summary")
   async summary() {
     const [chargers, sessions, payments, alerts] = await Promise.all([
-      this.prisma.charger.findMany(),
-      this.prisma.chargingSession.findMany({ include: { client: true, charger: true, payment: true }, orderBy: { startTime: "desc" } }),
-      this.prisma.payment.findMany({ include: { session: { include: { client: true, charger: true } } }, orderBy: { createdAt: "desc" } }),
+      this.prisma.charger.findMany({ include: { station: true, liveStatus: true } }),
+      this.prisma.chargingSession.findMany({ include: { client: true, charger: { include: { station: true, liveStatus: true } }, payment: true }, orderBy: { startTime: "desc" } }),
+      this.prisma.payment.findMany({ include: { session: { include: { client: true, charger: { include: { station: true, liveStatus: true } } } } }, orderBy: { createdAt: "desc" } }),
       this.prisma.alert.findMany({ where: { status: { not: "RESOLVED" } }, include: { charger: true }, orderBy: { createdAt: "desc" } }),
     ]);
     const todaySessions = sessions.filter(s => s.startTime >= startOfDay());

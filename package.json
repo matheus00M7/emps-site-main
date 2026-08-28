@@ -2,9 +2,12 @@
   "name": "emps-platform",
   "private": true,
   "scripts": {
-    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install && npm --prefix mobile install",
     "build": "npm --prefix backend run build && npm --prefix frontend run build",
     "dev:backend": "npm --prefix backend run start:dev",
-    "dev:frontend": "npm --prefix frontend run dev"
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:mobile": "npm --prefix mobile run start",
+    "check:mobile": "npm --prefix mobile run check",
+    "build:mobile": "npm --prefix mobile run export"
   }
 }

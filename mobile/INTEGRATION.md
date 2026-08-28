@@ -1,53 +1,65 @@
-# Plano de integração do EMPS Charge
+# Integração do EMPS Charge
 
-## Estado desta entrega
+Este documento descreve o contrato já usado entre o aplicativo, a API EMPS, o PostgreSQL e os adaptadores externos de pagamento e recarga.
 
-O aplicativo está completo como protótipo navegável e usa um adaptador demonstrativo local. O site administrativo e a API NestJS existentes permanecem inalterados. Isso respeita a decisão de não conectar o app ao backend agora, sem criar uma falsa integração que liberaria carregadores ou aprovaria pagamentos apenas no frontend.
-
-O contrato que o backend móvel deve implementar está tipado em `src/services/mobile-api.ts` sob o prefixo proposto `/mobile/v1`.
-
-## Arquitetura operacional
+## Arquitetura
 
 ```text
 Aplicativo Android/iOS
-        │ HTTPS + JWT + idempotência
+        │ HTTP(S) + JWT + Idempotency-Key
         ▼
-API móvel EMPS
-   ├── Conta do consumidor
-   ├── Estações, EVSEs, conectores e tarifas
-   ├── Vinculação/validação do QR
-   ├── Intenção e conciliação de pagamento
-   ├── Sessões, medidores e recibos
-   └── WebSocket/SSE/push
-        │
-        ├────────► PSP/gateway (PIX, cartão, Apple Pay, Google Pay)
-        │                 │ webhooks assinados
-        │                 ▼
-        └────────► CSMS/servidor de recarga ── OCPP/TLS ──► carregador
+API móvel NestJS — /mobile/v1
+   ├── PostgreSQL/Prisma
+   │    ├── usuários e refresh tokens
+   │    ├── eletropostos, carregadores e status ao vivo
+   │    ├── vínculos de QR e tarifas
+   │    ├── intenções/pagamentos e webhooks
+   │    └── sessões e comandos de recarga
+   │
+   ├──► Stripe ou adaptador sandbox
+   └──► gateway CSMS/OCPP ou adaptador sandbox ──► carregador
+
+Aplicativo ──► MapLibre/WebView ──► tiles OpenStreetMap
 ```
 
-O app nunca deve conversar diretamente com a bomba. Ele solicita a operação à API; a API autoriza o pagamento, reserva atomicamente o conector e envia o comando ao CSMS. A tela só mostra “recarga iniciada” depois da confirmação do equipamento.
+O app nunca conversa diretamente com a bomba. O QR identifica o carregador, mas não contém uma autorização. A API valida a conta, o vínculo de QR, o pagamento e a disponibilidade antes de criar a sessão e despachar um comando.
 
-OCPI só é necessário quando houver roaming ou operadores externos. Para a rede própria, OCPP entre o CSMS e os carregadores é suficiente no primeiro produto.
+## Modos de execução
 
-## Endpoints móveis propostos
+```dotenv
+EXPO_PUBLIC_EMPS_API_URL=http://IP-DO-COMPUTADOR:3001
+EXPO_PUBLIC_EMPS_DEMO_MODE=false
+```
 
-### Conta
+`false` ativa a integração e não permite fallback silencioso para dados simulados. `true` ativa deliberadamente o fluxo local de apresentação.
+
+Em aparelho físico, nunca configure `localhost`. Use o IPv4 LAN do computador ou uma URL HTTPS pública/túnel da própria API. Um túnel iniciado por `expo start --tunnel` transporta o Metro, não o backend.
+
+## Autenticação
 
 ```text
 POST /mobile/v1/auth/register
 POST /mobile/v1/auth/login
 POST /mobile/v1/auth/refresh
 POST /mobile/v1/auth/logout
-POST /mobile/v1/auth/forgot-password
-GET  /mobile/v1/me
-PATCH /mobile/v1/me
-DELETE /mobile/v1/me
+GET  /mobile/v1/auth/me
 ```
 
-O access token deve ser curto. O refresh token deve ser rotacionado, revogável e guardado no Keychain/Keystore. O usuário do token deve ser o proprietário obrigatório das sessões, pagamentos e recibos consultados.
+Login e cadastro retornam:
 
-### Mapa e carregadores
+```ts
+type AuthResult = {
+  user: { id: string; name: string; email: string };
+  accessToken: string;
+  refreshToken: string;
+};
+```
+
+O access token é enviado como `Authorization: Bearer <token>`. Após um `401`, o cliente tenta uma única renovação, grava o novo par de tokens e repete a solicitação. No Android/iOS, os tokens ficam no Keychain/Keystore por Expo SecureStore. Se a renovação falhar, a sessão local é encerrada.
+
+O servidor guarda apenas o hash do refresh token, rotaciona a família e permite revogação. Um motorista só consulta suas próprias intenções e sessões.
+
+## Eletropostos, mapa e QR
 
 ```text
 GET /mobile/v1/stations/nearby?lat=&lng=&radiusKm=
@@ -56,120 +68,145 @@ GET /mobile/v1/chargers/:chargerId
 GET /mobile/v1/qr/:publicToken
 ```
 
-`/qr/:publicToken` resolve um identificador público opaco para estação, EVSE e conector, retornando o status e uma tarifa temporariamente bloqueada. O token público não contém comando, segredo, preço ou autorização.
+`stations/nearby` calcula a proximidade usando as coordenadas do PostgreSQL. A API devolve os marcadores, carregadores e disponibilidade. OpenStreetMap fornece apenas o mapa-base.
 
-QR recomendado:
+No app nativo, MapLibre usa:
 
 ```text
-https://app.emps.com.br/c/<id-publico-opaco>
+https://tile.openstreetmap.org/{z}/{x}/{y}.png
 ```
 
-O domínio deve publicar `apple-app-site-association` e `/.well-known/assetlinks.json` para Universal Links/App Links verificados. O adesivo físico deve ser anti-violação e mostrar também o domínio e um código curto legível.
+Não há chave no APK/IPA. A atribuição é obrigatória. Para produção em escala, substitua o servidor público por um provedor de tiles OpenStreetMap com capacidade/SLA ou por tiles próprios, sem remover a atribuição.
 
-### Pagamento e recarga
+O QR recomendado usa identificador público opaco:
+
+```text
+https://app.emps.com.br/c/<publicToken>
+```
+
+O servidor resolve esse token para `QrBinding`, eletroposto e carregador e verifica validade/revogação. O token não carrega segredo, preço ou comando.
+
+Resposta mínima:
+
+```ts
+type ResolvedQr = {
+  qrBindingId: string;
+  station: Station;
+  charger: Charger;
+  tariffLockedUntil: string;
+};
+```
+
+Dados do seed:
+
+```text
+publicToken: paulista-a01-demo
+código curto: EMPS-PAULISTA-A01
+chargerId:    chg_001
+stationId:    st_001
+```
+
+## Pagamento
 
 ```text
 POST /mobile/v1/payment-intents
 GET  /mobile/v1/payment-intents/:id
+POST /webhooks/stripe
+```
+
+A criação recebe o carregador, método, limite e uma chave de idempotência. Resposta mínima:
+
+```ts
+type PaymentIntent = {
+  id: string;
+  status: string;
+  method: "pix" | "card" | "wallet";
+  providerClientSecret?: string;
+};
+```
+
+Com `PAYMENT_PROVIDER=sandbox`, a intenção é registrada e autorizada pelo simulador sem movimentar dinheiro. Com `stripe`, a API exige credenciais do provedor. Cartão/carteira usa autorização e captura; PIX usa confirmação assíncrona e eventual devolução do excedente. O estado confiável vem do webhook assinado e deduplicado no servidor.
+
+PAN e CVV não passam pela API EMPS nem ficam armazenados no app. Para Stripe real, ainda é obrigatório integrar o SDK/fluxo cliente do método escolhido, registrar o endpoint HTTPS de webhook e validar o ambiente sandbox antes da produção.
+
+## Recarga
+
+```text
 POST /mobile/v1/charging-sessions/start
 GET  /mobile/v1/charging-sessions/active
+GET  /mobile/v1/charging-sessions
 GET  /mobile/v1/charging-sessions/:id
 POST /mobile/v1/charging-sessions/:id/stop
-GET  /mobile/v1/charging-sessions
-GET  /mobile/v1/charging-sessions/:id/receipt
 ```
 
-Todas as operações mutáveis recebem `Idempotency-Key`. A chave deve ter unicidade por usuário/operação e o servidor deve devolver o mesmo resultado em repetição, impedindo cobrança ou sessão duplicada.
+O início recebe:
 
-## Máquina de estados
-
-```text
-QR_VALIDATED
-→ AWAITING_CABLE
-→ PAYMENT_AUTHORIZING
-→ PAYMENT_AUTHORIZED
-→ START_REQUESTED
-→ STARTING
-→ CHARGING
-→ STOP_REQUESTED
-→ STOPPING
-→ FINALIZING_METER
-→ PAYMENT_CAPTURING
-→ COMPLETED
+```json
+{
+  "qrBindingId": "qr_001",
+  "paymentIntentId": "payment_intent_...",
+  "spendingLimit": 50,
+  "idempotencyKey": "start_..."
+}
 ```
 
-Estados de recuperação necessários:
+`POST /payment-intents`, `POST /charging-sessions/start` e `POST /charging-sessions/:id/stop` recebem também `Idempotency-Key` no cabeçalho. A unicidade é por cliente/operação, impedindo cobrança, início ou parada duplicada após timeout ou repetição de toque.
 
-```text
-PAYMENT_REJECTED
-PAYMENT_PENDING
-START_FAILED
-CHARGER_TIMEOUT
-INTERRUPTED
-REFUND_PENDING
-REFUNDED
-DISPUTED
+Enquanto a tela de recarga está aberta, o cliente consulta a sessão ativa periodicamente. A API é a fonte de verdade de estado, energia, potência, duração e custo. WebSocket/SSE pode substituir esse polling posteriormente sem alterar o contrato central.
+
+Ao iniciar, a API:
+
+1. valida propriedade da intenção e do QR;
+2. verifica expiração, status, carregador e tarifa;
+3. reserva atomicamente o carregador e cria sessão/comando;
+4. despacha o comando ao adaptador OCPP fora da transação curta;
+5. persiste aceitação, falha ou timeout.
+
+Ao encerrar, a API despacha a parada, calcula/persiste as métricas, conclui o pagamento e devolve o carregador ao estado disponível. Em produção, energia faturável deve vir do medidor homologado do equipamento, não de uma estimativa por potência nominal e tempo.
+
+## OCPP e equipamento físico
+
+Sem `OCPP_GATEWAY_URL`, o adaptador sandbox aceita comandos e permite testar o software completo, mas não aciona uma bomba.
+
+Com gateway configurado, a API envia comandos correlacionados e autenticados para o CSMS. O gateway deve traduzir `START`, `STOP`, `STATUS`, `RESET` e `UNLOCK` para a versão OCPP do equipamento. OCPP 1.6J e OCPP 2.0.1 não são retrocompatíveis.
+
+“Comando enviado” não equivale a “energia liberada”. A confirmação física deve vir do carregador, junto de status do conector, identificador de transação e telemetria. Produção exige TLS, credenciais/certificados por equipamento, timeout, repetição idempotente e tratamento de desconexão.
+
+## Persistência
+
+O Prisma/PostgreSQL já modela as entidades centrais:
+
+- `User`, `Client` e `RefreshToken`;
+- `Station`, `Charger` e `ChargerLiveStatus`;
+- `QrBinding`;
+- `PaymentIntent`, `Payment` e `WebhookEvent`;
+- `ChargingSession` e `ChargingCommand`;
+- `Alert`.
+
+Valores monetários e energia usam tipos decimais. Há chaves únicas para e-mail, tokens, códigos públicos, IDs externos e idempotência, além de índices para proximidade, status, sessões e relacionamentos.
+
+## Contrato de erros
+
+Respostas podem vir diretamente no corpo ou envolvidas por `{ "data": ... }`. Erros usam status HTTP correto e podem incluir:
+
+```json
+{
+  "message": "Descrição segura para o usuário",
+  "code": "CODIGO_OPCIONAL"
+}
 ```
 
-O frontend não inventa transições. Cada estado vem de uma fonte autoritativa da API, que por sua vez correlaciona pagamento, comando OCPP e telemetria.
+O app não deve inventar um estado de sucesso quando ocorrer erro de rede, `401`, rejeição de pagamento ou timeout OCPP.
 
-## Banco de dados
+## Checklist antes de produção
 
-O Prisma atual precisa separar usuário administrativo de consumidor e adicionar pelo menos:
-
-- `ConsumerAccount`: nome, e-mail, hash, verificação, estado e consentimentos.
-- `RefreshToken` e `ConsumerDevice`: rotação, revogação e push.
-- `Station`: endereço, latitude/longitude, fuso, horários e comodidades.
-- `Evse`: identificador operacional dentro da estação.
-- `Connector`: conector físico, padrão, potência, estado e número da vaga.
-- `QrBinding`: token público, versão, conector, validade e revogação.
-- `Tariff`: preço/kWh, taxas, vigência e moeda.
-- `PaymentIntent` e `PaymentAttempt`: PSP, status, idempotência e IDs externos.
-- `ChargingCommand`: tipo, correlação OCPP, tentativas, timeout e resposta.
-- `ChargingSession`: consumidor proprietário, medidores inicial/final e tarifa congelada.
-- `MeterValue`: telemetria real recebida do carregador.
-- `Receipt`, `Refund` e `WebhookEvent`: documento, devolução, assinatura e deduplicação.
-
-Use índice geográfico para busca por raio. Energia faturada deve vir do medidor homologado, nunca de potência nominal multiplicada pelo tempo.
-
-## Pagamento
-
-- Cartão/carteira: usar SDK ou página hospedada do PSP, tokenização PCI, pré-autorização e captura do valor real no final.
-- PIX: definir produto explicitamente — saldo pré-pago com devolução do não utilizado ou carteira EMPS. PIX não funciona como captura variável de cartão.
-- Confirmar pagamento somente por webhook assinado no servidor.
-- Persistir todos os eventos, conciliar valores e tratar captura, reembolso, chargeback e duplicidade.
-- PAN e CVV nunca passam pelo backend EMPS nem são guardados no app.
-
-## Carregadores
-
-- OCPP 1.6J usa `RemoteStartTransaction`; OCPP 2.0.1 usa `RequestStartTransaction`.
-- O comando deve conter ID de correlação e timeout; “enviado” não significa “iniciado”.
-- Revalidar disponibilidade e reservar o conector dentro de uma transação atômica.
-- Usar TLS e preferir os perfis de segurança OCPP 2/3 com credenciais/certificados por equipamento.
-- Receber medições, estado do cabo, encerramento inesperado e falhas como eventos idempotentes.
-
-## Mapa e rota
-
-- Os marcadores e a disponibilidade vêm da API EMPS; OpenFreeMap fornece apenas o mapa-base.
-- A localização é foreground e opcional. Negá-la não bloqueia busca manual.
-- “Como chegar” abre Apple/Google Maps sem chave.
-- Para desenhar rota no app futuramente, o backend pode chamar o endpoint atual do HeiGIT/openrouteservice e devolver GeoJSON. A chave nunca entra no APK/IPA.
-
-## Troca do modo demonstrativo pela API
-
-1. Implemente e teste `/mobile/v1` atrás de HTTPS.
-2. Faça o backend retornar exatamente os contratos de `src/services/mobile-api.ts` ou gere tipos OpenAPI.
-3. Configure `EXPO_PUBLIC_EMPS_API_URL` e desative `EXPO_PUBLIC_EMPS_DEMO_MODE`.
-4. Substitua os métodos locais de `AppProvider` pelo cliente `createMobileApi`.
-5. Sincronize sessão ativa ao abrir o app e assine WebSocket/SSE para telemetria.
-6. Teste pagamento e OCPP em sandbox com simulador de carregador antes de qualquer equipamento público.
-7. Execute testes em aparelhos reais, perda de internet, app encerrado, QR adulterado, cobrança repetida e timeout do carregador.
-
-## Antes de publicar nas lojas
-
-- Confirmar direitos de uso das marcas e imagens GoodWe/SEMS+; o app atual usa somente a marca EMPS.
-- Hospedar termos, política de privacidade e exclusão de conta.
-- Configurar e verificar o domínio de deep link.
-- Integrar crash reporting, observabilidade, consentimento de analytics e suporte emergencial.
-- Validar acessibilidade, textos de permissão e fichas de privacidade das lojas.
-- Gerar builds assinados, testar em aparelhos Android/iOS e cumprir revisão financeira da Apple/Google/PSP.
+- publicar API, painel, deep links e webhooks em HTTPS;
+- trocar todas as senhas e chaves de desenvolvimento;
+- configurar Stripe real, SDK cliente e webhook assinado;
+- configurar/validar CSMS e OCPP com o modelo físico do carregador;
+- usar provedor de tiles OpenStreetMap adequado ao volume;
+- publicar política de privacidade, termos e exclusão de conta;
+- validar QR adulterado, cliques repetidos e reenvio de webhook;
+- testar perda de rede, refresh expirado, app encerrado e carregador offline;
+- verificar energia/metrologia, captura, PIX, reembolso e conciliação;
+- gerar builds assinados e testar Android e iOS reais.

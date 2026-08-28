@@ -2,7 +2,7 @@ import * as Location from 'expo-location';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { Bell, LocateFixed, MapPin, ScanLine, Search, Zap } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Pressable,
@@ -18,7 +18,6 @@ import { Brand } from '@/components/brand';
 import { StationCard } from '@/components/station-card';
 import { StationMap } from '@/components/station-map';
 import { Colors, Fonts, MaxContentWidth, Radius, Shadow } from '@/constants/theme';
-import { getCharger, getStation, stations } from '@/data/mock-data';
 import type { Coordinate } from '@/domain/models';
 import { getLiveSessionMetrics, useApp } from '@/context/app-context';
 import { distanceInKm, formatCurrency, formatEnergy } from '@/utils/formatters';
@@ -27,11 +26,36 @@ const DEFAULT_COORDINATE: Coordinate = { latitude: -23.5733, longitude: -46.6417
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { user, activeSession } = useApp();
+  const {
+    user,
+    activeSession,
+    chargers,
+    getCharger,
+    getStation,
+    isDemoMode,
+    isStationsLoading,
+    loadNearbyStations,
+    stations,
+  } = useApp();
   const [query, setQuery] = useState('');
   const [userCoordinate, setUserCoordinate] = useState(DEFAULT_COORDINATE);
   const [selectedStationId, setSelectedStationId] = useState<string>();
   const [locating, setLocating] = useState(false);
+  const [stationsError, setStationsError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    loadNearbyStations(DEFAULT_COORDINATE).catch((error) => {
+      if (active) {
+        setStationsError(
+          error instanceof Error ? error.message : 'Não foi possível carregar os eletropostos.',
+        );
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [loadNearbyStations]);
 
   const filteredStations = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase('pt-BR');
@@ -49,11 +73,16 @@ export default function HomeScreen() {
         distanceInKm(userCoordinate, left.coordinates) -
         distanceInKm(userCoordinate, right.coordinates),
     );
-  }, [query, userCoordinate]);
+  }, [query, stations, userCoordinate]);
 
-  const liveMetrics = activeSession ? getLiveSessionMetrics(activeSession) : null;
   const activeStation = activeSession ? getStation(activeSession.stationId) : null;
   const activeCharger = activeSession ? getCharger(activeSession.chargerId) : null;
+  const liveMetrics = activeSession
+    ? getLiveSessionMetrics(
+        activeSession,
+        isDemoMode ? activeCharger?.pricePerKwh ?? 0 : undefined,
+      )
+    : null;
 
   async function useCurrentLocation() {
     setLocating(true);
@@ -69,12 +98,20 @@ export default function HomeScreen() {
       const position = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
-      setUserCoordinate({
+      const nextCoordinate = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
-      });
-    } catch {
-      Alert.alert('Não encontramos sua posição', 'Verifique se o GPS está ligado e tente novamente.');
+      };
+      setUserCoordinate(nextCoordinate);
+      setStationsError('');
+      await loadNearbyStations(nextCoordinate);
+    } catch (error) {
+      Alert.alert(
+        'Não foi possível atualizar sua posição',
+        error instanceof Error
+          ? error.message
+          : 'Verifique se o GPS e a internet estão disponíveis e tente novamente.',
+      );
     } finally {
       setLocating(false);
     }
@@ -179,6 +216,7 @@ export default function HomeScreen() {
           </View>
 
           <StationMap
+            chargers={chargers}
             onSelectStation={(stationId) => {
               setSelectedStationId(stationId);
               router.push(`/station/${stationId}`);
@@ -190,7 +228,7 @@ export default function HomeScreen() {
 
           <View style={styles.listHeader}>
             <Text style={styles.listTitle}>Mais próximos</Text>
-            <View style={styles.countPill}><MapPin color={Colors.textMuted} size={11} /><Text style={styles.countText}>{filteredStations.length} locais</Text></View>
+            <View style={styles.countPill}><MapPin color={Colors.textMuted} size={11} /><Text style={styles.countText}>{isStationsLoading ? 'Atualizando…' : `${filteredStations.length} locais`}</Text></View>
           </View>
 
           <View style={styles.stationList}>
@@ -202,10 +240,10 @@ export default function HomeScreen() {
                 station={station}
               />
             ))}
-            {filteredStations.length === 0 ? (
+            {filteredStations.length === 0 && !isStationsLoading ? (
               <View style={styles.empty}>
                 <Text style={styles.emptyTitle}>Nenhum eletroposto encontrado</Text>
-                <Text style={styles.emptyText}>Tente buscar por outro bairro ou endereço.</Text>
+                <Text style={styles.emptyText}>{stationsError || 'Tente buscar por outro bairro ou endereço.'}</Text>
               </View>
             ) : null}
           </View>

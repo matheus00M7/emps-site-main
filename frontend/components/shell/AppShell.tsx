@@ -13,6 +13,7 @@ import {
   semsSidebarItems,
   semsToolbarItems,
 } from "@/components/shell/shell-navigation";
+import { api } from "@/services/emps-api";
 
 function EmpsLogo({ compact = false }: { compact?: boolean }) {
   return (
@@ -208,7 +209,13 @@ export function AppShell({
                 </button>
               );
             })}
-            <button className="sems-profile-button" type="button" aria-label="Perfil" title="Perfil">
+            <button
+              className="sems-profile-button"
+              type="button"
+              aria-label="Sair"
+              title="Sair"
+              onClick={() => api.logout()}
+            >
               <span>EM</span>
             </button>
           </div>

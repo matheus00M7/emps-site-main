@@ -6,21 +6,16 @@ export type QrResolution =
   | { ok: true; chargerId: string }
   | { ok: false; message: string };
 
-export function resolveEmpsQr(rawValue: string): QrResolution {
+export type QrTokenResolution =
+  | { ok: true; publicToken: string }
+  | { ok: false; message: string };
+
+const INVALID_MESSAGE = 'Código inválido, expirado ou ainda não cadastrado. Confira o adesivo da vaga.';
+
+export function parseEmpsQrPublicToken(rawValue: string): QrTokenResolution {
   const value = rawValue.trim();
 
-  if (!value) {
-    return { ok: false, message: 'Digite ou escaneie um código EMPS.' };
-  }
-
-  const directMatch = chargers.find(
-    (charger) =>
-      charger.publicCode.toLowerCase() === value.toLowerCase() ||
-      charger.id.toLowerCase() === value.toLowerCase() ||
-      charger.qrToken.toLowerCase() === value.toLowerCase(),
-  );
-
-  if (directMatch) return { ok: true, chargerId: directMatch.id };
+  if (!value) return { ok: false, message: 'Digite ou escaneie um código EMPS.' };
 
   try {
     const url = new URL(value);
@@ -34,35 +29,37 @@ export function resolveEmpsQr(rawValue: string): QrResolution {
 
     const isEmpsScheme = url.protocol === 'emps:';
     const isTrustedWebLink = url.protocol === 'https:' && ALLOWED_HOSTS.has(url.hostname);
-
     if (!isEmpsScheme && !isTrustedWebLink) {
       return { ok: false, message: 'Este QR code não pertence à rede EMPS.' };
     }
 
     const segments = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
-    const candidates = [
-      url.searchParams.get('token'),
-      url.searchParams.get('charger'),
-      segments.at(-1),
-      isEmpsScheme ? url.hostname : null,
-    ].filter((candidate): candidate is string => Boolean(candidate));
+    const publicToken =
+      url.searchParams.get('token') ??
+      url.searchParams.get('charger') ??
+      segments.at(-1) ??
+      (isEmpsScheme ? url.hostname : '');
 
-    const charger = chargers.find((item) =>
-      candidates.some(
-        (candidate) =>
-          item.id.toLowerCase() === candidate.toLowerCase() ||
-          item.publicCode.toLowerCase() === candidate.toLowerCase() ||
-          item.qrToken.toLowerCase() === candidate.toLowerCase(),
-      ),
-    );
-
-    if (charger) return { ok: true, chargerId: charger.id };
+    return publicToken ? { ok: true, publicToken } : { ok: false, message: INVALID_MESSAGE };
   } catch {
-    // A manual station code is handled above. Anything else is invalid.
+    if (/^[a-z0-9][a-z0-9._:-]{2,127}$/i.test(value)) {
+      return { ok: true, publicToken: value };
+    }
+    return { ok: false, message: INVALID_MESSAGE };
   }
+}
 
-  return {
-    ok: false,
-    message: 'Código inválido, expirado ou ainda não cadastrado. Confira o adesivo da vaga.',
-  };
+export function resolveEmpsQr(rawValue: string): QrResolution {
+  const parsed = parseEmpsQrPublicToken(rawValue);
+  if (!parsed.ok) return parsed;
+
+  const candidate = parsed.publicToken.toLowerCase();
+  const charger = chargers.find(
+    (item) =>
+      item.id.toLowerCase() === candidate ||
+      item.publicCode.toLowerCase() === candidate ||
+      item.qrToken.toLowerCase() === candidate,
+  );
+
+  return charger ? { ok: true, chargerId: charger.id } : { ok: false, message: INVALID_MESSAGE };
 }

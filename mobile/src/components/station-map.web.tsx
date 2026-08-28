@@ -1,11 +1,11 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Colors, Fonts, Radius } from '@/constants/theme';
-import { getStationChargers } from '@/data/mock-data';
-import type { Coordinate, Station } from '@/domain/models';
+import type { Charger, Coordinate, Station } from '@/domain/models';
 
 type StationMapProps = {
   stations: Station[];
+  chargers: Charger[];
   userCoordinate: Coordinate;
   selectedStationId?: string;
   onSelectStation: (stationId: string) => void;
@@ -18,10 +18,10 @@ const POSITIONS = [
   { left: '53%', top: '77%' },
 ] as const;
 
-export function StationMap({ stations, selectedStationId, onSelectStation }: StationMapProps) {
+export function StationMap({ stations, chargers, selectedStationId, onSelectStation }: StationMapProps) {
   return (
     <View
-      accessibilityLabel="Mapa demonstrativo dos eletropostos"
+      accessibilityLabel="Mapa dos eletropostos"
       role="region"
       style={styles.map}>
       <View style={[styles.road, styles.roadOne]} />
@@ -32,8 +32,8 @@ export function StationMap({ stations, selectedStationId, onSelectStation }: Sta
       <Text style={[styles.neighborhood, { left: '57%', top: '18%' }]}>Jardins</Text>
       <Text style={[styles.neighborhood, { left: '60%', top: '82%' }]}>Moema</Text>
       {stations.map((station, index) => {
-        const available = getStationChargers(station.id).filter(
-          (charger) => charger.status === 'available',
+        const available = chargers.filter(
+          (charger) => charger.stationId === station.id && charger.status === 'available',
         ).length;
         const selected = station.id === selectedStationId;
         return (

@@ -9,20 +9,26 @@ import {
 import { AppShell } from "@/components/shell/AppShell";
 import { StatusBadge } from "@/components/status/StatusBadge";
 
+const demoMode = process.env.NEXT_PUBLIC_EMPS_DEMO_MODE === "true";
+
 const settings = [
   {
     icon: DatabaseZap,
     label: "Fonte de dados",
-    value: "Front-only mock",
-    status: "pendente" as const,
-    detail: "Preparado para uma unica API EMPS.",
+    value: demoMode ? "Demonstracao local" : "API EMPS",
+    status: demoMode ? ("pendente" as const) : ("pronto" as const),
+    detail: demoMode
+      ? "Mocks habilitados explicitamente pela configuracao do ambiente."
+      : `Backend autenticado em ${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"}.`,
   },
   {
     icon: KeyRound,
     label: "Autenticacao",
-    value: "Sessao temporaria visual",
-    status: "pendente" as const,
-    detail: "Mock sem senha persistida; trocar por POST /api/login e JWT real.",
+    value: demoMode ? "Sessao demonstrativa" : "JWT Bearer",
+    status: demoMode ? ("pendente" as const) : ("pronto" as const),
+    detail: demoMode
+      ? "Token real desativado enquanto o modo de demonstracao estiver ativo."
+      : "Login real pela API, token na sessao do navegador e logout em respostas 401.",
   },
   {
     icon: ShieldCheck,
@@ -48,9 +54,11 @@ const settings = [
   {
     icon: Clock3,
     label: "Tempo real",
-    value: "Aguardando API",
-    status: "pendente" as const,
-    detail: "Pode evoluir para polling, SSE ou WebSocket EMPS.",
+    value: demoMode ? "Telemetria simulada" : "Live status da API",
+    status: demoMode ? ("pendente" as const) : ("pronto" as const),
+    detail: demoMode
+      ? "Valores locais representam o comportamento esperado da telemetria."
+      : "Station e liveStatus sao consumidos quando disponibilizados pelo backend.",
   },
 ];
 

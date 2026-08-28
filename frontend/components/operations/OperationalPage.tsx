@@ -30,11 +30,13 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
   const [filter, setFilter] = useState("todos");
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [sessionEnergyContext, setSessionEnergyContext] =
     useState<DashboardData | null>(null);
 
   async function load() {
     setLoading(true);
+    setLoadError("");
     try {
       const [nextRows, energyContext] = await Promise.all([
         api.list(resource),
@@ -43,6 +45,14 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
 
       setRows(nextRows);
       setSessionEnergyContext(energyContext);
+    } catch (error) {
+      setRows([]);
+      setSessionEnergyContext(null);
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : `Nao foi possivel carregar ${config.title.toLowerCase()}.`
+      );
     } finally {
       setLoading(false);
     }
@@ -65,45 +75,61 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
   async function runAction(row: ResourceRow) {
     const key = getRowKey(resource, row);
 
-    if (resource === "carregadores") {
-      await api.requestChargerStatus(key);
-      setNotice("Leitura do carregador adicionada a fila do backend.");
-    }
+    try {
+      if (resource === "carregadores") {
+        await api.requestChargerStatus(key);
+        setNotice("Sincronizacao do carregador solicitada ao backend.");
+      }
 
-    if (resource === "sessoes") {
-      await api.finishSession(key);
-      setRows((current) =>
-        current.map((item) =>
-          getRowKey(resource, item) === key
-            ? ({ ...item, status: "finalizada", dataFim: new Date().toISOString() } as ResourceRow)
-            : item
-        )
-      );
-      setNotice("Sessao finalizada no modo visual.");
-    }
+      if (resource === "sessoes") {
+        await api.finishSession(key);
+        setRows((current) =>
+          current.map((item) =>
+            getRowKey(resource, item) === key
+              ? ({
+                  ...item,
+                  status: "finalizada",
+                  dataFim: new Date().toISOString(),
+                } as ResourceRow)
+              : item
+          )
+        );
+        setNotice("Sessao finalizada no backend EMPS.");
+      }
 
-    if (resource === "pagamentos") {
-      await api.registerPayment(key);
-      setRows((current) =>
-        current.map((item) =>
-          getRowKey(resource, item) === key
-            ? ({ ...item, status: "aprovado", dataPagamento: new Date().toISOString() } as ResourceRow)
-            : item
-        )
-      );
-      setNotice("Pagamento aprovado no modo visual.");
-    }
+      if (resource === "pagamentos") {
+        await api.registerPayment(key);
+        setRows((current) =>
+          current.map((item) =>
+            getRowKey(resource, item) === key
+              ? ({
+                  ...item,
+                  status: "aprovado",
+                  dataPagamento: new Date().toISOString(),
+                } as ResourceRow)
+              : item
+          )
+        );
+        setNotice("Pagamento aprovado no backend EMPS.");
+      }
 
-    if (resource === "alertas") {
-      await api.resolveAlert(key);
-      setRows((current) =>
-        current.map((item) =>
-          getRowKey(resource, item) === key
-            ? ({ ...item, status: "resolvido" } as ResourceRow)
-            : item
-        )
+      if (resource === "alertas") {
+        await api.resolveAlert(key);
+        setRows((current) =>
+          current.map((item) =>
+            getRowKey(resource, item) === key
+              ? ({ ...item, status: "resolvido" } as ResourceRow)
+              : item
+          )
+        );
+        setNotice("Alerta resolvido no backend EMPS.");
+      }
+    } catch (error) {
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Nao foi possivel concluir a acao."
       );
-      setNotice("Alerta resolvido no modo visual.");
     }
 
     window.setTimeout(() => setNotice(""), 2200);
@@ -176,6 +202,16 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
           <div className="loading-panel">
             <RefreshCw className="spin" size={20} aria-hidden="true" />
             Carregando {config.title.toLowerCase()}
+          </div>
+        ) : loadError ? (
+          <div className="empty-state" role="alert">
+            <Settings2 size={22} aria-hidden="true" />
+            <strong>Nao foi possivel carregar os dados</strong>
+            <small>{loadError}</small>
+            <button className="table-action" onClick={() => void load()} type="button">
+              <RefreshCw size={14} aria-hidden="true" />
+              Tentar novamente
+            </button>
           </div>
         ) : filteredRows.length === 0 ? (
           <div className="empty-state">

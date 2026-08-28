@@ -1,26 +1,98 @@
 # EMPS Frontend
 
-```bash
+Painel administrativo em Next.js 16 e React conectado à mesma API NestJS e ao mesmo PostgreSQL usados pelo aplicativo EMPS Charge.
+
+## Executar com dados reais
+
+Inicie PostgreSQL, migrations, seed e backend conforme `../backend/README.md`. Depois, nesta pasta, use o Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env.local
 npm install
 npm run dev
 ```
 
-Abra `http://localhost:3000`.
+Abra `http://localhost:3000/login` e entre com o administrador criado pelo seed:
+
+```text
+E-mail: admin@emps.com
+Senha:  admin123
+```
+
+Configuração padrão:
+
+```dotenv
+NEXT_PUBLIC_API_URL=http://localhost:3001
+NEXT_PUBLIC_EMPS_DEMO_MODE=false
+```
+
+As variáveis `NEXT_PUBLIC_*` são incorporadas no bundle do Next.js. Altere-as antes do build e reinicie o servidor depois de qualquer mudança.
+
+Se o painel for aberto em outro computador ou celular da rede, `localhost` não encontrará a API. Nesse caso, use o IPv4 do computador que executa o backend:
+
+```dotenv
+NEXT_PUBLIC_API_URL=http://192.168.1.42:3001
+```
+
+Também inclua a origem do painel em `backend/.env`, por exemplo `CORS_ORIGINS="http://localhost:3000,http://192.168.1.42:3000"`.
+
+## Integração
+
+O login chama `POST /auth/login`. O JWT e os dados mínimos do usuário ficam em `sessionStorage` e seguem como `Authorization: Bearer <token>`. Uma resposta `401` encerra a sessão local e retorna ao login.
+
+O painel busca na API:
+
+- resumo do dashboard;
+- clientes;
+- carregadores e status ao vivo;
+- sessões de recarga;
+- pagamentos;
+- alertas.
+
+As ações operacionais também passam pela API: sincronização e comando do carregador, liberação manual, sessão pós-paga em dinheiro, encerramento de sessão, aprovação de pagamento e resolução de alerta. O frontend nunca acessa PostgreSQL, Stripe ou OCPP diretamente.
+
+A camada em `services/` converte o contrato da API e os enums Prisma para os status exibidos em português. Se a API falhar, a tela mostra o erro; ela não substitui dados reais por mocks.
+
+## Modo demonstração explícito
+
+Os mocks locais só são ativados quando solicitado:
+
+```dotenv
+NEXT_PUBLIC_EMPS_DEMO_MODE=true
+```
+
+Nesse modo isolado, o login aceita um e-mail com formato válido e senha com pelo menos seis caracteres. Ele serve para revisar a interface e não compartilha estado com o banco, o aplicativo, pagamento ou carregador.
+
+Com a variável ausente ou diferente de `true`, o painel usa exclusivamente a API configurada.
 
 ## Organização
 
-- `app/`: rotas do Next.js e layout global.
-- `components/shell/`: interface SEMS+ e entrada lateral do módulo EMPS.
-- `components/dashboard/`: painel do eletroposto e métricas.
-- `components/chargers/`: visual dos carregadores e imagens por status.
-- `components/operations/`: páginas operacionais de listas, filtros e ações.
-- `components/status/`: badges de status canônicos.
-- `domain/`: tipos do contrato EMPS.
-- `data/mock/`: dados simulados no formato esperado pela API EMPS.
-- `services/`: camada de acesso à API EMPS. Hoje usa mock local.
-- `styles/`: CSS separado por área visual.
-- `utils/`: formatadores de valores, datas, energia e status.
+- `app/`: rotas do App Router e layout global;
+- `components/dashboard/`: métricas e visão operacional;
+- `components/chargers/`: carregadores e ações;
+- `components/operations/`: listas, filtros e operações;
+- `components/shell/`: navegação e estrutura da interface;
+- `data/mock/`: dados exclusivos do modo demonstração;
+- `domain/`: tipos do contrato EMPS;
+- `services/`: autenticação, cliente HTTP e mapeadores;
+- `styles/`: estilos por área;
+- `utils/`: formatadores.
 
-## Regras de integração
+O OpenStreetMap é usado pelo mapa do aplicativo móvel. O painel recebe localização e dados do eletroposto pela API, sem incluir chaves ou segredos de mapa.
 
-O front deve conversar apenas com a API EMPS. Credenciais, tokens e integrações SEMS+ ficam no backend/adaptador, nunca no navegador. Os campos e status canônicos seguem os documentos do projeto, como `carregadorId`, `sessaoId`, `energiaKwh`, `disponivel`, `em_uso`, `manutencao`, `erro`, `ativa`, `finalizada`, `pendente` e `aprovado`.
+## Produção e verificação
+
+```powershell
+npm run build
+npm run start
+```
+
+Em produção:
+
+- configure `NEXT_PUBLIC_API_URL` com a URL HTTPS pública do backend;
+- mantenha `NEXT_PUBLIC_EMPS_DEMO_MODE=false`;
+- adicione o domínio do painel a `CORS_ORIGINS`;
+- não coloque chaves Stripe, tokens OCPP ou credenciais de banco em variáveis `NEXT_PUBLIC_*`;
+- troque as credenciais do seed.
+
+Pagamento real e liberação física dependem dos adaptadores configurados no backend; a interface, sozinha, não movimenta dinheiro nem controla uma bomba.

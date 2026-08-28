@@ -10,14 +10,15 @@ import {
   Wifi,
   Zap,
 } from 'lucide-react-native';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/ui/app-button';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Colors, Fonts, MaxContentWidth, Radius } from '@/constants/theme';
-import { getStation, getStationChargers } from '@/data/mock-data';
+import { useApp } from '@/context/app-context';
 import { formatCurrency } from '@/utils/formatters';
 import { openDirections } from '@/utils/maps';
 
@@ -26,13 +27,41 @@ const AMENITY_ICONS = { Café: Coffee, 'Wi-Fi': Wifi, Segurança: ShieldCheck } 
 export default function StationDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { getStation, getStationChargers, loadStation } = useApp();
   const station = getStation(id);
+  const [loading, setLoading] = useState(!station);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    loadStation(id)
+      .catch((error) => {
+        if (active) {
+          setLoadError(error instanceof Error ? error.message : 'Eletroposto não encontrado.');
+        }
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [id, loadStation]);
+
+  if (!station && loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.missing}>
+          <ActivityIndicator color={Colors.coral} />
+          <Text style={styles.missingTitle}>Carregando eletroposto…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!station) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.missing}>
-          <Text style={styles.missingTitle}>Eletroposto não encontrado</Text>
+          <Text style={styles.missingTitle}>{loadError || 'Eletroposto não encontrado'}</Text>
           <AppButton onPress={() => router.replace('/')} title="Voltar ao mapa" />
         </View>
       </SafeAreaView>

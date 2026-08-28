@@ -10,6 +10,7 @@ datasource db {
 enum Role {
   ADMIN
   OPERATOR
+  CUSTOMER
 }
 
 enum ChargerStatus {
@@ -31,6 +32,7 @@ enum PaymentMethod {
   PIX
   CARD
   DIGITAL_WALLET
+  CASH
   SIMULATED
 }
 
@@ -53,70 +55,359 @@ enum AlertStatus {
   RESOLVED
 }
 
+enum GeocodingStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum StationStatus {
+  PENDING
+  ACTIVE
+  INACTIVE
+  MAINTENANCE
+}
+
+enum ChargerPowerType {
+  AC
+  DC
+}
+
+enum ChargerAdministrativeStatus {
+  PENDING
+  ENABLED
+  DISABLED
+  MAINTENANCE
+}
+
+enum ChargerOperationalStatus {
+  UNKNOWN
+  AVAILABLE
+  PREPARING
+  CHARGING
+  SUSPENDED
+  FINISHING
+  RESERVED
+  UNAVAILABLE
+  FAULTED
+  OFFLINE
+}
+
+enum PaymentIntentStatus {
+  REQUIRES_ACTION
+  AUTHORIZED
+  REJECTED
+  CANCELED
+  CAPTURED
+  EXPIRED
+}
+
+enum ChargingCommandType {
+  START_CHARGING
+  STOP_CHARGING
+  UNLOCK_CONNECTOR
+  RESET
+  SYNC_STATUS
+}
+
+enum ChargingCommandStatus {
+  PENDING
+  SENT
+  ACCEPTED
+  REJECTED
+  TIMED_OUT
+  FAILED
+  COMPLETED
+}
+
 model User {
-  id           String   @id @default(cuid())
-  name         String
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(OPERATOR)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  passwordHash  String
+  role          Role           @default(OPERATOR)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  client        Client?
+  refreshTokens RefreshToken[]
+  stations      Station[]
 }
 
 model Client {
-  id        String            @id @default(cuid())
-  name      String
-  vehicle   String
-  plate     String            @unique
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
-  sessions  ChargingSession[]
+  id             String            @id @default(cuid())
+  userId         String?           @unique
+  name           String
+  vehicle        String?
+  plate          String?           @unique
+  phone          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  user           User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  sessions       ChargingSession[]
+  paymentIntents PaymentIntent[]
+  commands       ChargingCommand[]
+
+  @@index([name])
+}
+
+model Station {
+  id               String            @id @default(cuid())
+  adminId          String
+  code             String            @unique
+  name             String
+  postalCode       String
+  street           String
+  addressNumber    String
+  complement       String?
+  neighborhood     String
+  city             String
+  state            String
+  countryCode      String            @default("BR")
+  latitude         Decimal?          @db.Decimal(10, 8)
+  longitude        Decimal?          @db.Decimal(11, 8)
+  geocodingStatus  GeocodingStatus   @default(PENDING)
+  powerLimitKw     Decimal?          @db.Decimal(10, 2)
+  status           StationStatus     @default(PENDING)
+  timezone         String            @default("America/Sao_Paulo")
+  openingHours     String?
+  amenities        String[]          @default([])
+  featured         Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  admin            User              @relation(fields: [adminId], references: [id], onDelete: Restrict)
+  chargers         Charger[]
+  chargingSessions ChargingSession[]
+
+  @@index([adminId])
+  @@index([status])
+  @@index([latitude, longitude])
 }
 
 model Charger {
-  id             String            @id @default(cuid())
-  name           String
-  location       String
-  connectorType  String
-  status         ChargerStatus
-  powerKw        Decimal           @db.Decimal(10, 2)
-  pricePerKwh    Decimal           @db.Decimal(10, 2)
-  temperature    Decimal?          @db.Decimal(10, 2)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  sessions       ChargingSession[]
-  alerts         Alert[]
+  id                     String                      @id @default(cuid())
+  stationId              String?
+  publicCode             String?                     @unique
+  name                   String
+  location               String
+  connectorType          String
+  status                 ChargerStatus
+  powerKw                Decimal                     @db.Decimal(10, 2)
+  pricePerKwh            Decimal                     @db.Decimal(10, 2)
+  temperature            Decimal?                    @db.Decimal(10, 2)
+  ocppIdentity           String?                     @unique
+  ocppVersion            String?
+  serialNumber           String?                     @unique
+  manufacturer           String?
+  model                  String?
+  firmwareVersion        String?
+  powerType              ChargerPowerType?
+  phaseCount             Int?
+  configuredPowerLimitKw Decimal?                    @db.Decimal(10, 2)
+  administrativeStatus   ChargerAdministrativeStatus @default(PENDING)
+  provisionedAt          DateTime?
+  createdAt              DateTime                    @default(now())
+  updatedAt              DateTime                    @updatedAt
+  station                Station?                    @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  liveStatus             ChargerLiveStatus?
+  qrBindings             QrBinding[]
+  sessions               ChargingSession[]
+  paymentIntents         PaymentIntent[]
+  commands               ChargingCommand[]
+  alerts                 Alert[]
+
+  @@index([stationId, status])
+  @@index([administrativeStatus])
+}
+
+model ChargerLiveStatus {
+  chargerId         String                   @id
+  operationalStatus ChargerOperationalStatus @default(UNKNOWN)
+  currentPowerKw    Decimal                  @default(0) @db.Decimal(10, 3)
+  meterTotalKwh     Decimal?                 @db.Decimal(14, 3)
+  voltageV          Decimal?                 @db.Decimal(8, 2)
+  currentA          Decimal?                 @db.Decimal(8, 2)
+  lastErrorCode     String?
+  lastSeenAt        DateTime?
+  updatedAt         DateTime                 @updatedAt
+  charger           Charger                  @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+
+  @@index([operationalStatus])
+  @@index([lastSeenAt])
+}
+
+model QrBinding {
+  id          String            @id @default(cuid())
+  chargerId   String
+  publicToken String            @unique
+  code        String            @unique
+  version     Int               @default(1)
+  validFrom   DateTime          @default(now())
+  expiresAt   DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  charger     Charger           @relation(fields: [chargerId], references: [id], onDelete: Cascade)
+  sessions    ChargingSession[]
+
+  @@index([chargerId, revokedAt])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id            String    @id @default(cuid())
+  userId        String
+  tokenHash     String    @unique
+  familyId      String    @default(cuid())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  revokedReason String?
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([userId, revokedAt])
+  @@index([familyId])
+}
+
+model PaymentIntent {
+  id               String              @id @default(cuid())
+  clientId         String
+  chargerId        String
+  idempotencyKey   String
+  method           PaymentMethod
+  status           PaymentIntentStatus @default(REQUIRES_ACTION)
+  provider         String              @default("SIMULATED")
+  providerIntentId String?
+  spendingLimit    Decimal?            @db.Decimal(10, 2)
+  authorizedAmount Decimal?            @db.Decimal(10, 2)
+  capturedAmount   Decimal?            @db.Decimal(10, 2)
+  currency         String              @default("BRL")
+  expiresAt        DateTime?
+  authorizedAt     DateTime?
+  canceledAt       DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  client           Client              @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  charger          Charger             @relation(fields: [chargerId], references: [id], onDelete: Restrict)
+  chargingSession  ChargingSession?
+  payments         Payment[]
+
+  @@unique([clientId, idempotencyKey])
+  @@unique([provider, providerIntentId])
+  @@index([chargerId, status])
+  @@index([clientId, status, createdAt])
 }
 
 model ChargingSession {
-  id              String        @id @default(cuid())
-  code            String        @unique
-  clientId        String
-  chargerId       String
-  startTime       DateTime
-  endTime         DateTime?
-  durationMinutes Int?
-  energyKwh       Decimal?      @db.Decimal(10, 3)
-  totalPrice      Decimal?      @db.Decimal(10, 2)
-  status          SessionStatus
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  client          Client        @relation(fields: [clientId], references: [id])
-  charger         Charger       @relation(fields: [chargerId], references: [id])
-  payment         Payment?
+  id                  String            @id @default(cuid())
+  code                String            @unique
+  clientId            String
+  chargerId           String
+  stationId           String?
+  paymentIntentId     String?           @unique
+  qrBindingId         String?
+  startIdempotencyKey String?
+  stopIdempotencyKey  String?
+  transactionId       String?           @unique
+  startTime           DateTime
+  endTime             DateTime?
+  stopRequestedAt     DateTime?
+  durationMinutes     Int?
+  energyKwh           Decimal?          @db.Decimal(10, 3)
+  totalPrice          Decimal?          @db.Decimal(10, 2)
+  pricePerKwhSnapshot Decimal?          @db.Decimal(10, 2)
+  spendingLimit       Decimal?          @db.Decimal(10, 2)
+  currency            String            @default("BRL")
+  meterStartKwh       Decimal?          @db.Decimal(14, 3)
+  meterEndKwh         Decimal?          @db.Decimal(14, 3)
+  lastMeterKwh        Decimal?          @db.Decimal(14, 3)
+  tariffLockedAt      DateTime?
+  tariffLockedUntil   DateTime?
+  status              SessionStatus
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  client              Client            @relation(fields: [clientId], references: [id])
+  charger             Charger           @relation(fields: [chargerId], references: [id])
+  station             Station?          @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  paymentIntent       PaymentIntent?    @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+  qrBinding           QrBinding?        @relation(fields: [qrBindingId], references: [id], onDelete: SetNull)
+  payment             Payment?
+  commands            ChargingCommand[]
+
+  @@unique([clientId, startIdempotencyKey])
+  @@unique([clientId, stopIdempotencyKey])
+  @@index([clientId, status])
+  @@index([chargerId, status])
+  @@index([stationId, startTime])
+  @@index([qrBindingId])
 }
 
 model Payment {
-  id        String        @id @default(cuid())
-  code      String        @unique
-  sessionId String        @unique
-  method    PaymentMethod
-  amount    Decimal       @db.Decimal(10, 2)
-  status    PaymentStatus
-  paidAt    DateTime?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  session   ChargingSession @relation(fields: [sessionId], references: [id])
+  id                String          @id @default(cuid())
+  code              String          @unique
+  sessionId         String          @unique
+  paymentIntentId   String?
+  idempotencyKey    String?         @unique
+  method            PaymentMethod
+  amount            Decimal         @db.Decimal(10, 2)
+  currency          String          @default("BRL")
+  status            PaymentStatus
+  provider          String?
+  providerPaymentId String?
+  paidAt            DateTime?
+  capturedAt        DateTime?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  session           ChargingSession @relation(fields: [sessionId], references: [id])
+  paymentIntent     PaymentIntent?  @relation(fields: [paymentIntentId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerPaymentId])
+  @@index([paymentIntentId])
+  @@index([status, createdAt])
+}
+
+model ChargingCommand {
+  id              String                @id @default(cuid())
+  chargerId       String
+  sessionId       String?
+  clientId        String?
+  type            ChargingCommandType
+  status          ChargingCommandStatus @default(PENDING)
+  idempotencyKey  String
+  correlationId   String                @unique @default(cuid())
+  ocppMessageId   String?               @unique
+  requestPayload  Json?
+  responsePayload Json?
+  attempts        Int                   @default(0)
+  timeoutAt       DateTime?
+  sentAt          DateTime?
+  acknowledgedAt  DateTime?
+  completedAt     DateTime?
+  lastError       String?
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+  charger         Charger               @relation(fields: [chargerId], references: [id], onDelete: Restrict)
+  session         ChargingSession?      @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  client          Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  @@unique([clientId, type, idempotencyKey])
+  @@index([chargerId, status, createdAt])
+  @@index([sessionId, type])
+}
+
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String
+  providerEventId String
+  eventType       String
+  payload         Json?
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+
+  @@unique([provider, providerEventId])
+  @@index([processedAt, createdAt])
 }
 
 model Alert {
@@ -129,4 +420,7 @@ model Alert {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
   charger     Charger?      @relation(fields: [chargerId], references: [id])
+
+  @@index([chargerId])
+  @@index([status, createdAt])
 }

@@ -17,11 +17,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppButton } from '@/components/ui/app-button';
 import { Colors, Fonts, MaxContentWidth, Radius } from '@/constants/theme';
 import { useApp } from '@/context/app-context';
-import { resolveEmpsQr } from '@/utils/qr';
 
 export default function ScanScreen() {
   const router = useRouter();
-  const { activeSession } = useApp();
+  const { activeSession, resolveQrCode } = useApp();
   const [permission, requestPermission] = useCameraPermissions();
   const [torch, setTorch] = useState(false);
   const [scanned, setScanned] = useState(false);
@@ -42,30 +41,30 @@ export default function ScanScreen() {
         source,
         preview: value.slice(0, 80),
       });
-      const resolution = resolveEmpsQr(value);
-
-      if (resolution.ok) {
+      try {
+        const resolution = await resolveQrCode(value);
         console.info('[qr-scanner] carregador resolvido', {
           source,
-          chargerId: resolution.chargerId,
+          chargerId: resolution.charger.id,
         });
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        router.replace(`/charger/${resolution.chargerId}`);
+        router.replace(`/charger/${resolution.charger.id}`);
         return;
+      } catch (resolutionError) {
+        const message =
+          resolutionError instanceof Error
+            ? resolutionError.message
+            : 'Não foi possível confirmar este QR.';
+        console.warn('[qr-scanner] código rejeitado', { source, reason: message });
+        setError(message);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        setTimeout(() => {
+          scanLock.current = false;
+          setScanned(false);
+        }, 1800);
       }
-
-      console.warn('[qr-scanner] código rejeitado', {
-        source,
-        reason: resolution.message,
-      });
-      setError(resolution.message);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setTimeout(() => {
-        scanLock.current = false;
-        setScanned(false);
-      }, 1800);
     },
-    [router],
+    [resolveQrCode, router],
   );
 
   useEffect(() => {
@@ -323,7 +322,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cameraShade: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#00000020',
   },
   frame: {

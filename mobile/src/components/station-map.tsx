@@ -3,23 +3,30 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 
 import { Colors, Fonts, Radius } from '@/constants/theme';
-import { getStationChargers } from '@/data/mock-data';
-import type { Coordinate, Station } from '@/domain/models';
+import type { Charger, Coordinate, Station } from '@/domain/models';
 
 type StationMapProps = {
   stations: Station[];
+  chargers: Charger[];
   userCoordinate: Coordinate;
   selectedStationId?: string;
   onSelectStation: (stationId: string) => void;
 };
 
-function buildMapHtml(stations: Station[], user: Coordinate, selectedStationId?: string) {
+function buildMapHtml(
+  stations: Station[],
+  chargers: Charger[],
+  user: Coordinate,
+  selectedStationId?: string,
+) {
   const points = stations.map((station) => ({
     id: station.id,
     name: station.name,
     latitude: station.coordinates.latitude,
     longitude: station.coordinates.longitude,
-    available: getStationChargers(station.id).filter((charger) => charger.status === 'available').length,
+    available: chargers.filter(
+      (charger) => charger.stationId === station.id && charger.status === 'available',
+    ).length,
     selected: station.id === selectedStationId,
   }));
 
@@ -28,10 +35,11 @@ function buildMapHtml(stations: Station[], user: Coordinate, selectedStationId?:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <link href="https://unpkg.com/maplibre-gl@6.6.0/dist/maplibre-gl.css" rel="stylesheet" />
+  <link href="https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.css" rel="stylesheet" />
   <style>
     html, body, #map { height: 100%; width: 100%; margin: 0; background: #17191d; }
-    .maplibregl-ctrl-attrib { font: 9px system-ui, sans-serif; opacity: .78; }
+    .osm-attribution { position: fixed; z-index: 5; right: 4px; bottom: 3px; padding: 2px 5px; border-radius: 3px; background: rgba(255,255,255,.88); color: #222; font: 9px system-ui, sans-serif; }
+    .osm-attribution a { color: #222; text-decoration: none; }
     .station-marker { width: 38px; height: 38px; border-radius: 19px; background: #202224; border: 3px solid #ff323a; box-shadow: 0 8px 18px rgba(0,0,0,.38); display: flex; align-items: center; justify-content: center; color: #fff; font: 700 12px system-ui, sans-serif; }
     .station-marker.selected { width: 46px; height: 46px; border-radius: 23px; background: #ff323a; border-color: #fff; }
     .station-marker.empty { border-color: #727981; color: #a7adb5; }
@@ -40,16 +48,30 @@ function buildMapHtml(stations: Station[], user: Coordinate, selectedStationId?:
 </head>
 <body>
   <div id="map"></div>
-  <script src="https://unpkg.com/maplibre-gl@6.6.0/dist/maplibre-gl.js"></script>
+  <div class="osm-attribution"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></div>
+  <script src="https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.js" onerror="window.ReactNativeWebView.postMessage('map-error')"></script>
   <script>
     const points = ${JSON.stringify(points)};
     const user = ${JSON.stringify(user)};
     const map = new maplibregl.Map({
       container: 'map',
-      style: 'https://tiles.openfreemap.org/styles/liberty',
+      style: {
+        version: 8,
+        sources: {
+          osm: {
+            type: 'raster',
+            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+            tileSize: 256,
+            minzoom: 0,
+            maxzoom: 19,
+            attribution: '© OpenStreetMap contributors'
+          }
+        },
+        layers: [{ id: 'osm-tiles', type: 'raster', source: 'osm' }]
+      },
       center: [user.longitude, user.latitude],
       zoom: 11.8,
-      attributionControl: true
+      attributionControl: false
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     const bounds = new maplibregl.LngLatBounds();
@@ -70,18 +92,24 @@ function buildMapHtml(stations: Station[], user: Coordinate, selectedStationId?:
       if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 54, maxZoom: 13, duration: 0 });
       window.ReactNativeWebView.postMessage('ready');
     });
-    map.on('error', () => window.ReactNativeWebView.postMessage('map-error'));
+    map.on('error', (event) => console.warn('OpenStreetMap tile error', event && event.error));
   </script>
 </body>
 </html>`;
 }
 
-export function StationMap({ stations, userCoordinate, selectedStationId, onSelectStation }: StationMapProps) {
+export function StationMap({
+  stations,
+  chargers,
+  userCoordinate,
+  selectedStationId,
+  onSelectStation,
+}: StationMapProps) {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const html = useMemo(
-    () => buildMapHtml(stations, userCoordinate, selectedStationId),
-    [selectedStationId, stations, userCoordinate],
+    () => buildMapHtml(stations, chargers, userCoordinate, selectedStationId),
+    [chargers, selectedStationId, stations, userCoordinate],
   );
 
   if (error) {
@@ -103,6 +131,8 @@ export function StationMap({ stations, userCoordinate, selectedStationId, onSele
       ) : null}
       <WebView
         allowFileAccess={false}
+        applicationNameForUserAgent="EMPSCharge/1.0 (+https://app.emps.com.br)"
+        cacheEnabled
         javaScriptEnabled
         onError={() => setError(true)}
         onMessage={(event) => {
@@ -134,7 +164,7 @@ const styles = StyleSheet.create({
   },
   webview: { backgroundColor: Colors.surface, flex: 1 },
   loading: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     backgroundColor: Colors.surface,
     gap: 9,

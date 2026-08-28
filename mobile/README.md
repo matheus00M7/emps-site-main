@@ -1,117 +1,197 @@
-# EMPS Charge — aplicativo Android e iOS
+# EMPS Charge — Android e iOS
 
-Aplicativo do motorista para localizar eletropostos, ler o QR code da vaga, escolher a forma de pagamento, iniciar uma recarga e acompanhar consumo, tempo e custo.
+Aplicativo do motorista para localizar eletropostos, ler o QR da vaga, escolher o pagamento, iniciar uma recarga e acompanhar consumo, tempo, custo e histórico.
 
-O projeto usa Expo 57 + React Native e gera Android, iOS e uma versão web de conferência a partir do mesmo código. Nesta entrega, os fluxos operam com dados demonstrativos persistidos no aparelho; nenhuma cobrança real ou comando físico é enviado.
+O projeto usa Expo SDK 54, React Native e Expo Router, compatível com o Expo Go 54.x disponível no Android. O modo conectado consome a API NestJS compartilhada em `/mobile/v1`. O modo demonstração existe, mas só entra em ação quando é habilitado explicitamente.
 
-## Prévia
+## O que está integrado
 
-| Início | Leitor de QR | Pagamento |
-| --- | --- | --- |
-| ![Início](docs/previews/home.png) | ![Leitor de QR](docs/previews/scanner.png) | ![Pagamento](docs/previews/checkout.png) |
+- login e cadastro pela API, access token curto e refresh token rotativo;
+- armazenamento seguro dos tokens no Keychain/Keystore por Expo SecureStore;
+- eletropostos próximos, carregadores, status, potência e tarifa vindos do PostgreSQL;
+- localização foreground opcional;
+- mapa nativo com MapLibre e tiles do OpenStreetMap;
+- câmera para QR e alternativa por código digitado;
+- resolução do QR no backend antes de qualquer liberação;
+- intenção de pagamento idempotente;
+- início, atualização periódica e encerramento da sessão pela API;
+- sessão ativa recuperável, recibo e histórico sincronizado;
+- deep links `https://app.emps.com.br/c/...` e `emps://charger/...`.
 
-| Recarga ao vivo | Recibo |
-| --- | --- |
-| ![Recarga ao vivo](docs/previews/charging.png) | ![Recibo](docs/previews/receipt.png) |
+## Executar em um celular físico
 
-## O que já funciona
+### 1. Inicie banco e API
 
-- Login e cadastro com nome, e-mail e senha.
-- Sessão local persistida e token demonstrativo protegido no Keychain/Keystore.
-- Mapa com OpenFreeMap/OpenStreetMap, localização opcional e lista por proximidade.
-- Detalhe de eletroposto, vagas, conectores, potência, tarifa, disponibilidade e rota externa.
-- Leitor real de QR code pela câmera e alternativa por código digitado.
-- Validação de QR EMPS, deep link HTTPS e retomada do carregador após login/cadastro.
-- Pagamento demonstrativo com PIX, cartão e carteira digital.
-- Limite de gasto, confirmação da vaga e início idempotente preparado no contrato de API.
-- Tela de recarga ao vivo com energia, potência, custo, duração e limite.
-- Encerramento confirmado, recibo compartilhável e histórico persistido.
-- Perfil, métodos de pagamento e áreas preparadas para veículo, notificações, ajuda e LGPD.
-- Ícones, splash, permissões, bundle IDs e perfis de build Android/iOS.
+Na raiz do monorepo, em um PowerShell:
 
-## Executar
-
-Requisitos: Node.js e npm.
-
-```bash
-cd mobile
+```powershell
+docker compose up -d
+Set-Location backend
+Copy-Item .env.example .env
 npm install
-npm start
+npx prisma generate
+npx prisma migrate deploy
+npm run prisma:seed
+npm run start:dev
 ```
 
-Com o servidor do Expo aberto:
+Confirme no computador:
 
-- Leia o QR exibido no terminal com o Expo Go no Android ou iPhone.
-- Pressione `a` para abrir um emulador Android configurado.
-- Pressione `w` para abrir a versão web de conferência.
-- Para compilar iOS a partir do Windows, use o serviço EAS Build ou teste primeiro pelo Expo Go.
+```powershell
+Invoke-RestMethod http://localhost:3001/auth/health
+```
 
-Credenciais demonstrativas:
+### 2. Descubra o endereço do computador
+
+```powershell
+ipconfig
+```
+
+Use o endereço `IPv4` do adaptador Wi-Fi ativo, por exemplo `192.168.1.42`. O computador e o celular devem estar na mesma rede. Libere o Node.js e a porta `3001` no Firewall do Windows para redes privadas.
+
+### 3. Configure o app
+
+Em outro PowerShell:
+
+```powershell
+Set-Location mobile
+Copy-Item .env.example .env
+npm install
+```
+
+Edite `.env`:
+
+```dotenv
+EXPO_PUBLIC_EMPS_API_URL=http://192.168.1.42:3001
+EXPO_PUBLIC_EMPS_DEMO_MODE=false
+```
+
+> Nunca use `localhost` em `EXPO_PUBLIC_EMPS_API_URL` ao testar num celular físico. Nesse aparelho, `localhost` é o próprio Android/iPhone, não o computador que executa a API.
+
+### 4. Abra no Expo Go
+
+Instale ou atualize o Expo Go pela loja e execute:
+
+```powershell
+npx expo start --lan --clear
+```
+
+Leia o QR do terminal com o Expo Go. Se a rede bloquear a conexão com o Metro, tente:
+
+```powershell
+npx expo start --tunnel --clear
+```
+
+O túnel do Expo expõe somente o bundle do app. Ele não expõe a API NestJS. Nesse modo, mantenha o celular na mesma LAN para acessar `http://IP:3001` ou exponha também o backend por um túnel HTTPS e use essa URL em `EXPO_PUBLIC_EMPS_API_URL`.
+
+Se o Expo Go informar incompatibilidade, atualize-o. Para um SDK que ainda não esteja disponível no Expo Go da loja, gere um development build/preview com EAS em vez de tentar abrir um projeto de SDK diferente.
+
+## Credenciais e QR de teste
+
+Após executar o seed do backend, o modo conectado aceita:
 
 ```text
 E-mail: motorista@emps.com
 Senha:  emps123
 ```
 
-Código de carregador para testar sem câmera:
+Código para digitar manualmente:
 
 ```text
 EMPS-PAULISTA-A01
 ```
 
-QR de carregador para testar a câmera (abra esta imagem em outra tela ou imprima):
+Token e link do mesmo QR:
+
+```text
+paulista-a01-demo
+https://app.emps.com.br/c/paulista-a01-demo
+```
+
+Abra a imagem abaixo em outra tela ou imprima para testar a câmera:
 
 ![QR de teste EMPS Paulista A01](docs/qr/emps-paulista-a01.png)
 
-> O QR exibido pelo terminal do Expo contém um endereço `exp://` e serve somente para abrir o aplicativo. Ele não é um QR de carregador EMPS.
+O QR exibido pelo terminal do Expo contém um endereço `exp://` e serve somente para abrir o aplicativo. Ele não representa um carregador EMPS.
 
-Também são aceitos os formatos:
+## OpenStreetMap
+
+No Android e iOS, `src/components/station-map.tsx` carrega MapLibre GL dentro de uma WebView e usa diretamente os tiles raster padrão:
 
 ```text
-https://app.emps.com.br/c/paulista-a01-demo
-emps://charger/chg_001
+https://tile.openstreetmap.org/{z}/{x}/{y}.png
 ```
 
-## Verificações
+Não há chave, conta ou cartão de faturamento. Atribuição ao OpenStreetMap é exibida no mapa. É necessário acesso à internet para baixar o MapLibre e os tiles; os marcadores ainda dependem da API EMPS, pois o OpenStreetMap fornece o mapa-base, não a disponibilidade dos carregadores.
 
-```bash
+A versão web de conferência usa uma visualização simplificada; valide o mapa real em Android/iOS.
+
+Os servidores públicos do OpenStreetMap não têm SLA nem capacidade ilimitada. Para uma publicação comercial com tráfego relevante, use um provedor de tiles baseado em OpenStreetMap ou infraestrutura própria, respeitando a política de tiles, o cache e a atribuição.
+
+O botão “Como chegar” abre Apple Maps no iOS ou Google Maps no Android. Isso é separado do mapa-base e não exige chave dentro do aplicativo.
+
+## Modo demonstração explícito
+
+Para apresentar o aplicativo sem banco e sem API:
+
+```dotenv
+EXPO_PUBLIC_EMPS_DEMO_MODE=true
+```
+
+Depois reinicie com:
+
+```powershell
+npx expo start --clear
+```
+
+Com `false` ou com a variável ausente, o app não troca silenciosamente para mocks. Erros de URL, rede, autenticação e backend são mostrados ao usuário.
+
+## Diagnóstico rápido de rede
+
+No computador, substitua o IP pelo endereço real:
+
+```powershell
+Test-NetConnection 192.168.1.42 -Port 3001
+Invoke-RestMethod http://192.168.1.42:3001/auth/health
+```
+
+Se o app abrir, mas login e eletropostos falharem:
+
+1. confirme que `EXPO_PUBLIC_EMPS_DEMO_MODE=false`;
+2. confirme que o backend continua aberto na porta `3001`;
+3. confira o IP em `mobile/.env` e reinicie o Expo com `--clear`;
+4. teste a URL pelo navegador do próprio celular;
+5. desative temporariamente VPN/rede de convidados ou permita a conexão no Firewall;
+6. não substitua o IP por `localhost`.
+
+Se o mapa ficar em branco, confirme que o celular tem internet e consegue acessar `https://tile.openstreetmap.org`. Uma rede corporativa pode bloquear o CDN do MapLibre ou os tiles.
+
+## Verificações e builds
+
+```powershell
 npm run check
 npm run export
 ```
 
-O primeiro comando executa lint, checagem completa de TypeScript e os testes automatizados de QR, links seguros, distância e formatação. O segundo gera os pacotes Android, iOS e a versão web de conferência em `dist/`.
+O primeiro comando executa lint, TypeScript e testes. O segundo exporta Android, iOS e a versão web em `dist/`.
 
-## Gerar builds instaláveis
+Para gerar um APK interno:
 
-O arquivo `eas.json` já contém perfis de desenvolvimento, APK interno e produção.
-
-```bash
+```powershell
 npx eas-cli login
 npx eas-cli build --platform android --profile preview
+```
+
+Para iOS a partir do Windows, use o EAS Build:
+
+```powershell
 npx eas-cli build --platform ios --profile preview
 ```
 
-Antes de publicar, altere o identificador `com.emps.charge` caso a organização use outro domínio, associe o projeto à conta Expo/EAS e configure as credenciais das lojas.
+Antes de publicar, associe o projeto à conta Expo/EAS, configure as credenciais das lojas, defina a URL HTTPS de produção da API e valide os deep links do domínio.
 
-## Mapas
+## Limites das integrações externas
 
-O app usa MapLibre GL dentro de uma WebView nativa com o estilo público do OpenFreeMap. Não exige chave, cartão ou conta de faturamento. A posição do usuário vem de `expo-location`, solicitada somente ao tocar em “Minha posição”. A rota abre Apple Maps no iOS ou Google Maps no Android por URL, também sem chave.
+O fluxo local usa pagamento e OCPP em sandbox. Para cobrar dinheiro de verdade, o backend precisa de credenciais Stripe, webhook assinado e integração do método de pagamento no cliente. Para liberar uma bomba física, precisa de um CSMS/gateway OCPP configurado e compatível com o equipamento.
 
-OpenFreeMap não oferece SLA. Para escala comercial, é prudente contratar um provedor compatível ou hospedar os próprios tiles, preservando a atribuição do OpenStreetMap.
-
-## Integração futura
-
-O contrato tipado está em `src/services/mobile-api.ts` e o desenho completo em `INTEGRATION.md`. O backend atual do painel é administrativo e ainda não possui contas de consumidor, estação geográfica, QR, gateway de pagamento, telemetria nem OCPP; portanto não deve ser ligado diretamente ao app sem essa camada.
-
-Variáveis previstas:
-
-```bash
-cp .env.example .env
-```
-
-```text
-EXPO_PUBLIC_EMPS_API_URL=http://IP-DA-MAQUINA:3001
-EXPO_PUBLIC_EMPS_DEMO_MODE=true
-```
-
-Em aparelho físico, `localhost` aponta para o próprio celular. Use o IP local do computador ou uma URL HTTPS acessível.
+Nenhum desses serviços é substituído pelo mapa ou pelo QR. Consulte `INTEGRATION.md` para o contrato e `../backend/README.md` para as variáveis do servidor.

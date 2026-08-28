@@ -45,6 +45,7 @@ export type Charger = {
   status: ChargerStatus;
   potenciaMaximaKw: number;
   potenciaAtualKw: number;
+  tarifaKwh: number;
   tipoConector: string;
   estacaoId: string;
   estacaoNome: string;
@@ -230,5 +231,6 @@ export type FrontSession = {
   nome: string;
   email: string;
   role: UserRole;
-  modo: "front-only";
+  token: string | null;
+  modo: "api" | "front-only";
 };

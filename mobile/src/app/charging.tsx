@@ -18,7 +18,6 @@ import Svg, { Circle } from 'react-native-svg';
 import { AppButton } from '@/components/ui/app-button';
 import { PageHeader } from '@/components/ui/page-header';
 import { Colors, Fonts, MaxContentWidth, Radius } from '@/constants/theme';
-import { getCharger, getStation } from '@/data/mock-data';
 import { getLiveSessionMetrics, useApp } from '@/context/app-context';
 import { formatCurrency, formatEnergy, formatPower, formatTimer } from '@/utils/formatters';
 
@@ -29,25 +28,55 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export default function ChargingScreen() {
   const router = useRouter();
-  const { activeSession, finishSession } = useApp();
-  const [now, setNow] = useState(0);
+  const {
+    activeSession,
+    finishSession,
+    getCharger,
+    getStation,
+    isDemoMode,
+    refreshActiveSession,
+  } = useApp();
+  const [now, setNow] = useState(() => Date.now());
   const [stopping, setStopping] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const [telemetryConnected, setTelemetryConnected] = useState(true);
+  const charger = activeSession ? getCharger(activeSession.chargerId) : undefined;
+  const station = activeSession ? getStation(activeSession.stationId) : undefined;
 
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
-  }, []);
+    if (isDemoMode) {
+      const interval = setInterval(() => setNow(Date.now()), 1000);
+      return () => clearInterval(interval);
+    }
+
+    let active = true;
+    const refresh = () => {
+      refreshActiveSession()
+        .then(() => active && setTelemetryConnected(true))
+        .catch(() => active && setTelemetryConnected(false));
+    };
+    refresh();
+    const interval = setInterval(refresh, 5_000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [isDemoMode, refreshActiveSession]);
 
   const metrics = useMemo(
-    () => (activeSession ? getLiveSessionMetrics(activeSession, now) : null),
-    [activeSession, now],
+    () =>
+      activeSession
+        ? getLiveSessionMetrics(
+            activeSession,
+            isDemoMode ? charger?.pricePerKwh ?? 0 : undefined,
+            now,
+          )
+        : null,
+    [activeSession, charger?.pricePerKwh, isDemoMode, now],
   );
 
   if (!activeSession || !metrics) return <Redirect href="/" />;
 
-  const charger = getCharger(activeSession.chargerId);
-  const station = getStation(activeSession.stationId);
   const limitProgress = activeSession.spendingLimit
     ? Math.min(metrics.totalCost / activeSession.spendingLimit, 1)
     : Math.min(metrics.energyKwh / 40, 0.92);
@@ -154,7 +183,13 @@ export default function ChargingScreen() {
 
           <View style={styles.telemetryRow}>
             <View style={styles.telemetryDot} />
-            <Text style={styles.telemetryText}>Telemetria atualizada agora · Dados demonstrativos</Text>
+            <Text style={styles.telemetryText}>
+              {isDemoMode
+                ? 'Telemetria atualizada agora · Dados demonstrativos'
+                : telemetryConnected
+                  ? 'Telemetria sincronizada com a EMPS'
+                  : 'Sem atualização recente · tentando reconectar'}
+            </Text>
           </View>
 
           <AppButton

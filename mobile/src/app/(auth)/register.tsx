@@ -21,7 +21,7 @@ import { useApp } from '@/context/app-context';
 
 export default function RegisterScreen() {
   const router = useRouter();
-  const { chargerId } = useLocalSearchParams<{ chargerId?: string }>();
+  const { chargerId, qrToken } = useLocalSearchParams<{ chargerId?: string; qrToken?: string }>();
   const { register } = useApp();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -41,7 +41,8 @@ export default function RegisterScreen() {
     try {
       await register(name, email, password);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      if (chargerId) router.replace(`/charger/${chargerId}`);
+      if (qrToken) router.replace(`/c/${encodeURIComponent(qrToken)}`);
+      else if (chargerId) router.replace(`/charger/${chargerId}`);
     } catch (registerError) {
       setError(registerError instanceof Error ? registerError.message : 'Não foi possível criar a conta.');
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -122,7 +123,9 @@ export default function RegisterScreen() {
                   <Text style={styles.muted}>Já tem uma conta?</Text>
                   <Link
                     href={
-                      chargerId
+                      qrToken
+                        ? { pathname: '/login', params: { qrToken } }
+                        : chargerId
                         ? { pathname: '/login', params: { chargerId } }
                         : { pathname: '/login' }
                     }

@@ -94,15 +94,18 @@
           "configureAndroidBackup": true,
           "faceIDPermission": "Permita que a EMPS use o Face ID para proteger sua conta."
         }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": [],
+          "enableGooglePay": false
+        }
       ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "apiUrl": "http://localhost:3001",
-      "demoMode": true
     }
   }
 }

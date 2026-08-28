@@ -35,8 +35,6 @@ import { StatusBadge } from "@/components/status/StatusBadge";
 import { chargerVisualStates } from "@/components/chargers/charger-visual-state";
 import { api } from "@/services/emps-api";
 
-const MANUAL_RELEASE_TARIFF_PER_KWH = 3;
-
 type CashReleaseMode = "prepaid" | "postpaid";
 
 type ManualReleaseDraft = {
@@ -300,7 +298,7 @@ export function ChargerVisualBoard({
           motivo: "pagamento_no_encerramento",
           operadorId: "usr_admin_front",
           origem: "caixa",
-          tarifaKwh: MANUAL_RELEASE_TARIFF_PER_KWH,
+          tarifaKwh: charger.tarifaKwh,
         });
 
         setPostpaidSessions((currentSessions) => ({
@@ -368,7 +366,7 @@ export function ChargerVisualBoard({
         modo: "pre_pago",
         operadorId: "usr_admin_front",
         origem: "caixa",
-        tarifaKwh: MANUAL_RELEASE_TARIFF_PER_KWH,
+        tarifaKwh: charger.tarifaKwh,
         valorRecebido: receivedValue,
       });
 
@@ -565,6 +563,15 @@ export function ChargerVisualBoard({
           };
         })
       );
+      setManualReleaseMessage(null);
+    } catch (error) {
+      setManualReleaseMessage({
+        chargerId: charger.carregadorId,
+        text:
+          error instanceof Error
+            ? error.message
+            : "Nao foi possivel executar o comando do carregador.",
+      });
     } finally {
       setChargerCommandLoadingKey(null);
     }
@@ -603,7 +610,7 @@ export function ChargerVisualBoard({
           const manualReleaseAmount = parseMoneyInput(manualReleaseValue);
           const manualReleaseKwh =
             Number.isFinite(manualReleaseAmount) && manualReleaseAmount > 0
-              ? manualReleaseAmount / MANUAL_RELEASE_TARIFF_PER_KWH
+              ? manualReleaseAmount / charger.tarifaKwh
               : 0;
           const postpaidSettlementValue = isPostpaidSettlementOpen
             ? postpaidSettlementDraft.value
@@ -936,7 +943,7 @@ export function ChargerVisualBoard({
                       </label>
                       <div className="manual-release-summary">
                         <span>
-                          Tarifa {formatCurrency(MANUAL_RELEASE_TARIFF_PER_KWH)}/kWh
+                          Tarifa {formatCurrency(charger.tarifaKwh)}/kWh
                         </span>
                         <strong>{formatKwh(manualReleaseKwh)} liberados</strong>
                       </div>

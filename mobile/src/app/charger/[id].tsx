@@ -1,31 +1,61 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { Cable, Check, Clock3, Info, MapPin, Navigation, ShieldCheck, Zap } from 'lucide-react-native';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Cable, Check, Clock3, Info, MapPin, Navigation, ScanLine, ShieldCheck, Zap } from 'lucide-react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppButton } from '@/components/ui/app-button';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatusPill } from '@/components/ui/status-pill';
 import { Colors, Fonts, MaxContentWidth, Radius } from '@/constants/theme';
-import { getCharger, getStation } from '@/data/mock-data';
+import { useApp } from '@/context/app-context';
 import { formatCurrency } from '@/utils/formatters';
 import { openDirections } from '@/utils/maps';
 
 export default function ChargerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { getCharger, getStation, hasQrBinding, isDemoMode, loadCharger } = useApp();
   const charger = getCharger(id);
   const station = charger ? getStation(charger.stationId) : undefined;
+  const [loading, setLoading] = useState(!charger || !station);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    loadCharger(id)
+      .catch((error) => {
+        if (active) {
+          setLoadError(error instanceof Error ? error.message : 'Carregador não encontrado.');
+        }
+      })
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
+    };
+  }, [id, loadCharger]);
+
+  if ((!charger || !station) && loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.missing}>
+          <ActivityIndicator color={Colors.coral} />
+          <Text style={styles.missingTitle}>Confirmando carregador…</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (!charger || !station) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.missing}><Text style={styles.missingTitle}>Carregador não encontrado</Text><AppButton onPress={() => router.replace('/')} title="Voltar ao início" /></View>
+        <View style={styles.missing}><Text style={styles.missingTitle}>{loadError || 'Carregador não encontrado'}</Text><AppButton onPress={() => router.replace('/')} title="Voltar ao início" /></View>
       </SafeAreaView>
     );
   }
 
   const available = charger.status === 'available';
+  const qrValidated = isDemoMode || hasQrBinding(charger.id);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safeArea}>
@@ -74,9 +104,21 @@ export default function ChargerDetailScreen() {
 
           <AppButton
             disabled={!available}
-            icon={available ? <Check color={Colors.white} size={19} /> : undefined}
-            onPress={() => router.push(`/checkout?chargerId=${charger.id}`)}
-            title={available ? 'É esta vaga · continuar' : 'Carregador indisponível'}
+            icon={
+              available ? (
+                qrValidated ? <Check color={Colors.white} size={19} /> : <ScanLine color={Colors.white} size={19} />
+              ) : undefined
+            }
+            onPress={() =>
+              qrValidated ? router.push(`/checkout?chargerId=${charger.id}`) : router.push('/scan')
+            }
+            title={
+              available
+                ? qrValidated
+                  ? 'É esta vaga · continuar'
+                  : 'Escanear QR para continuar'
+                : 'Carregador indisponível'
+            }
           />
           <AppButton icon={<Navigation color={Colors.text} size={17} />} onPress={() => openDirections(station)} title="Ver rota até o eletroposto" variant="ghost" />
         </View>

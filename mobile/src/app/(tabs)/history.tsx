@@ -1,5 +1,6 @@
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { History as HistoryIcon, Zap } from 'lucide-react-native';
+import { useCallback } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -10,7 +11,15 @@ import { formatCurrency, formatEnergy } from '@/utils/formatters';
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const { activeSession, history } = useApp();
+  const { activeSession, history, refreshHistory } = useApp();
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshHistory().catch((error) =>
+        console.warn('[emps-api] histórico temporariamente indisponível', error),
+      );
+    }, [refreshHistory]),
+  );
   const totalEnergy = history.reduce((sum, item) => sum + item.energyKwh, 0);
   const totalSpent = history.reduce((sum, item) => sum + item.totalCost, 0);
 
