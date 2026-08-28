@@ -10,6 +10,27 @@
     transform var(--motion-fast);
 }
 
+.session-energy-flow {
+  margin: 16px auto 0;
+  min-width: 720px;
+  width: min(1040px, 58%);
+}
+
+.session-energy-flow .energy-flow {
+  margin-top: 0;
+}
+
+.session-energy-flow .energy-flow__scene {
+  min-height: 0;
+}
+
+@media (max-width: 900px) {
+  .session-energy-flow {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
 .resource-toolbar:hover {
   border-color: #45484f;
   box-shadow: 0 16px 34px #00000034, inset 0 1px #ffffff0b;

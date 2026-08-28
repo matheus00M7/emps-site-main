@@ -489,6 +489,7 @@
 }
 
 .topbar-actions {
+  align-items: center;
   gap: 16px;
   justify-content: flex-end;
 }
@@ -522,15 +523,22 @@
 }
 
 .sems-top-action {
+  align-items: center;
   background: transparent;
   border: 0;
   color: #f1f4f7;
   display: inline-flex;
   height: 36px;
   justify-content: center;
+  line-height: 0;
   padding: 0;
   transition: color 0.16s ease, filter 0.16s ease, transform 0.16s ease;
   width: 28px;
+}
+
+.sems-top-action svg {
+  display: block;
+  flex: 0 0 auto;
 }
 
 .sems-top-action:hover {

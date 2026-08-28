@@ -163,10 +163,12 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
       )}
 
       {resource === "sessoes" && !loading && sessionEnergyContext && (
-        <EnergyFlowStation
-          chargers={sessionEnergyContext.carregadores}
-          telemetry={sessionEnergyContext.energyFlow}
-        />
+        <div className="session-energy-flow">
+          <EnergyFlowStation
+            chargers={sessionEnergyContext.carregadores}
+            telemetry={sessionEnergyContext.energyFlow}
+          />
+        </div>
       )}
 
       <section className="panel table-panel">

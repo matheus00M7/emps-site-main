@@ -32,13 +32,25 @@
   flex: 0 0 auto;
   height: 30px;
   justify-content: center;
+  line-height: 0;
   width: 30px;
 }
 
-.energy-flow__title span,
+.energy-flow__title-icon svg {
+  display: block;
+}
+
+.energy-flow__title div > span,
 .energy-flow__title h3 {
   display: block;
   margin: 0;
+}
+
+.energy-flow__title > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 30px;
 }
 
 .energy-flow__title div > span {
@@ -199,11 +211,12 @@
 .energy-inverter {
   filter: drop-shadow(0 7px 8px #17222b55);
   height: auto;
-  left: 26.3%;
+  left: 13.2%;
   pointer-events: none;
   position: absolute;
   top: 61.2%;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) scaleX(-1);
+  transform-origin: center;
   width: clamp(96px, 9vw, 144px);
   z-index: 2;
 }

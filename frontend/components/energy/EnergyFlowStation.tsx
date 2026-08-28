@@ -8,10 +8,10 @@ import {
 import type { Charger, EnergyFlowTelemetry } from "@/domain/emps";
 
 const routes = {
-  grid: "M 0 181 L 207 178 L 570 309 V 445 H 438 V 576",
+  grid: "M 0 181 H 220 V 576",
   solar: "M 1515 492 H 1350 V 680 H 1260 V 742",
-  battery: "M 1260 742 V 820 H 438 V 576",
-  chargerBus: "M 438 576 H 540 V 650 H 835 V 590",
+  battery: "M 1260 742 V 820 H 220 V 576",
+  chargerBus: "M 220 576 H 540 V 650 H 835 V 590",
   chargerAlpha: "M 835 590 H 720 V 548",
   chargerBeta: "M 835 590 H 952 V 549",
 };
