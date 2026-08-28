@@ -13,6 +13,7 @@ import {
 } from 'react';
 
 import { EMPS_API_URL, EMPS_DEMO_MODE } from '@/config/runtime';
+import { createStorageKeys } from '@/config/storage';
 import {
   chargers as demoChargers,
   getCharger as getDemoCharger,
@@ -37,21 +38,7 @@ import {
 } from '@/services/mobile-api';
 import { parseEmpsQrPublicToken, resolveEmpsQr } from '@/utils/qr';
 
-const STORAGE = EMPS_DEMO_MODE
-  ? {
-      accessToken: '@emps/demo/access-token',
-      activeSession: '@emps/demo/active-session',
-      history: '@emps/demo/history',
-      refreshToken: '@emps/demo/refresh-token',
-      user: '@emps/demo/user',
-    }
-  : {
-      accessToken: '@emps/real/access-token',
-      activeSession: '@emps/real/active-session',
-      history: '@emps/real/history',
-      refreshToken: '@emps/real/refresh-token',
-      user: '@emps/real/user',
-    };
+const STORAGE = createStorageKeys(EMPS_DEMO_MODE);
 
 const demoUser: ConsumerUser = {
   id: 'consumer_demo_001',
