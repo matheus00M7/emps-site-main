@@ -152,7 +152,9 @@ O início recebe:
 
 `POST /payment-intents`, `POST /charging-sessions/start` e `POST /charging-sessions/:id/stop` recebem também `Idempotency-Key` no cabeçalho. A unicidade é por cliente/operação, impedindo cobrança, início ou parada duplicada após timeout ou repetição de toque.
 
-Enquanto a tela de recarga está aberta, o cliente consulta a sessão ativa periodicamente. A API é a fonte de verdade de estado, energia, potência, duração e custo. WebSocket/SSE pode substituir esse polling posteriormente sem alterar o contrato central.
+O aplicativo conecta com Socket.IO em `/realtime`, usando somente transporte WebSocket e `auth.token` com o access token atual. O evento `emps:change` é tratado como sinal de invalidação: o payload não substitui os modelos locais; o cliente refaz as consultas REST autoritativas de sessão, histórico, estação e/ou carregador. Os tópicos reconhecidos são `session.created`, `session.updated`, `payment.updated`, `charger.updated`, `station.updated`, `alert.updated`, `customer.updated` e `dashboard.updated`; tópicos desconhecidos fazem uma atualização conservadora.
+
+Enquanto a tela de recarga está aberta, o polling REST usa cinco segundos quando o WebSocket está fora e 30 segundos como conferência de segurança quando ele está conectado. Fora dessa tela, o contexto confere sessões a cada 15 segundos durante uma queda e a cada 60 segundos com o canal ao vivo; estações e carregadores em cache usam uma conferência separada de cinco minutos. A API continua sendo a fonte de verdade de estado, energia, potência, duração e custo.
 
 Ao iniciar, a API:
 

@@ -17,15 +17,17 @@ O banco executável é PostgreSQL. Sua fonte de verdade é `backend/prisma/schem
 
 ```text
 Painel Next.js ───────┐
-                     ├── HTTPS/JWT ──► API NestJS ──► PostgreSQL/Prisma
-App Expo Android/iOS ┘                    │
-                                         ├──► Stripe ou simulador de pagamento
-                                         └──► gateway CSMS/OCPP ou simulador local
+                     ├── HTTPS/JWT + Socket.IO/JWT ──► API NestJS ──► PostgreSQL/Prisma
+App Expo Android/iOS ┘                                      │
+                                                           ├──► Stripe ou simulador de pagamento
+                                                           └──► gateway CSMS/OCPP ou simulador local
 
 App Expo ──► MapLibre ──► tiles do OpenStreetMap
 ```
 
 O app consulta eletropostos, resolve o QR no servidor, cria uma intenção de pagamento e solicita o início ou encerramento da sessão. Ele não envia comandos diretamente ao carregador. A API mantém a autorização, a idempotência e o estado da sessão.
+
+Depois de uma alteração, a API envia pelo Socket.IO apenas o tipo e o ID do que mudou. O painel e o aplicativo refazem as consultas REST e recebem o estado oficial do PostgreSQL. Em uma queda do WebSocket, ambos reconectam; o painel ativa sincronização periódica e a tela de recarga mantém polling REST de cinco segundos.
 
 ## Início rápido no Windows PowerShell
 

@@ -70,6 +70,10 @@
     flex-wrap: wrap;
   }
 
+  .topbar-sync {
+    margin-right: auto;
+  }
+
   .page-content {
     padding: 14px;
   }

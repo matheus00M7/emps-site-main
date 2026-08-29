@@ -51,6 +51,12 @@ O painel busca na API:
 
 As ações operacionais também passam pela API: sincronização e comando do carregador, liberação manual, sessão pós-paga em dinheiro, encerramento de sessão, aprovação de pagamento e resolução de alerta. O frontend nunca acessa PostgreSQL, Stripe ou OCPP diretamente.
 
+## Sincronização em tempo real
+
+No modo conectado, o painel abre o namespace Socket.IO `${NEXT_PUBLIC_API_URL}/realtime` com o mesmo JWT do login. Ao receber `emps:change`, atualiza pela API REST somente as telas afetadas; o conteúdo do evento nunca substitui diretamente os dados oficiais.
+
+O topo mostra `Ao vivo`, `Conectando` ou `Reconectando`. Cada conexão e reconexão dispara uma conciliação REST para recuperar alterações ocorridas durante a queda. O painel faz ainda uma conferência de segurança a cada 60 segundos; se o WebSocket estiver indisponível, tenta reconectar automaticamente e reduz esse intervalo para 15 segundos. O modo demonstração permanece isolado e não abre conexão realtime.
+
 A camada em `services/` converte o contrato da API e os enums Prisma para os status exibidos em português. Se a API falhar, a tela mostra o erro; ela não substitui dados reais por mocks.
 
 ## Modo demonstração explícito

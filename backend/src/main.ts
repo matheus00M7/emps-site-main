@@ -2,13 +2,13 @@ import { ValidationPipe } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
+import { parseRealtimeCorsOrigins } from "./realtime.helpers";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
-  const allowedOrigins = (process.env.CORS_ORIGINS ?? process.env.FRONTEND_URL ?? "http://localhost:3000,http://localhost:8081")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
+  const allowedOrigins = parseRealtimeCorsOrigins(
+    process.env.CORS_ORIGINS ?? process.env.FRONTEND_URL,
+  );
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
   app.enableCors({

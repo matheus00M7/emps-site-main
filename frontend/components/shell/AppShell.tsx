@@ -14,6 +14,17 @@ import {
   semsToolbarItems,
 } from "@/components/shell/shell-navigation";
 import { api } from "@/services/emps-api";
+import {
+  useRealtime,
+  type RealtimeStatus,
+} from "@/components/realtime/RealtimeProvider";
+
+const realtimeLabels: Record<RealtimeStatus, string> = {
+  connected: "Ao vivo",
+  connecting: "Conectando",
+  disconnected: "Reconectando",
+  disabled: "Dados demonstrativos",
+};
 
 function EmpsLogo({ compact = false }: { compact?: boolean }) {
   return (
@@ -61,6 +72,7 @@ export function AppShell({
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [empsMenuOpen, setEmpsMenuOpen] = useState(false);
+  const { status: realtimeStatus } = useRealtime();
   const breadcrumb = eyebrow.startsWith("SEMS+") ? eyebrow : `SEMS+ / ${eyebrow}`;
 
   useEffect(() => {
@@ -195,6 +207,15 @@ export function AppShell({
           </div>
 
           <div className="topbar-actions" aria-label="Acoes SEMS+">
+            <span
+              className={`topbar-sync topbar-sync--${realtimeStatus}`}
+              role="status"
+              aria-live="polite"
+              title="Estado da sincronizacao entre painel, aplicativo e API"
+            >
+              <i aria-hidden="true" />
+              {realtimeLabels[realtimeStatus]}
+            </span>
             {semsToolbarItems.map((item) => {
               const Icon = item.icon;
               return (

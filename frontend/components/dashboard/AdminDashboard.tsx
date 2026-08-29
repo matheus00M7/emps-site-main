@@ -9,7 +9,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -36,6 +36,7 @@ import {
   formatMinutes,
 } from "@/utils/formatters";
 import { api } from "@/services/emps-api";
+import { useRealtime } from "@/components/realtime/RealtimeProvider";
 
 function Metric({
   bars,
@@ -121,27 +122,84 @@ export function AdminDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const loadGenerationRef = useRef(0);
+  const visibleLoadGenerationRef = useRef(0);
+  const handledConnectionRef = useRef(0);
+  const handledChangeRevisionRef = useRef(0);
+  const initialLoadStartedRef = useRef(false);
+  const {
+    changeRevision,
+    connectionVersion,
+    status: realtimeStatus,
+  } = useRealtime();
 
-  async function load() {
-    setLoading(true);
-    setError("");
-    try {
-      setData(await api.dashboard());
-    } catch (loadError) {
-      setData(null);
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : "Nao foi possivel carregar o painel EMPS."
-      );
-    } finally {
-      setLoading(false);
+  const load = useCallback(async (silent = false) => {
+    const generation = ++loadGenerationRef.current;
+    if (!silent) {
+      visibleLoadGenerationRef.current = generation;
+      setLoading(true);
+      setError("");
     }
-  }
+
+    try {
+      const nextData = await api.dashboard();
+      if (generation !== loadGenerationRef.current) return;
+      setData(nextData);
+      setError("");
+    } catch (loadError) {
+      if (!silent && generation === loadGenerationRef.current) {
+        setData(null);
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : "Nao foi possivel carregar o painel EMPS."
+        );
+      }
+    } finally {
+      if (!silent && generation === visibleLoadGenerationRef.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    load();
-  }, []);
+    if (initialLoadStartedRef.current) return;
+    initialLoadStartedRef.current = true;
+    handledConnectionRef.current = connectionVersion;
+    handledChangeRevisionRef.current = changeRevision;
+    void load();
+  }, [changeRevision, connectionVersion, load]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    let shouldRefresh = false;
+    if (connectionVersion > handledConnectionRef.current) {
+      handledConnectionRef.current = connectionVersion;
+      shouldRefresh = true;
+    }
+    if (changeRevision > handledChangeRevisionRef.current) {
+      handledChangeRevisionRef.current = changeRevision;
+      shouldRefresh = true;
+    }
+    if (!shouldRefresh) return;
+
+    const refreshTimer = window.setTimeout(() => {
+      void load(true);
+    }, 180);
+
+    return () => window.clearTimeout(refreshTimer);
+  }, [changeRevision, connectionVersion, load, loading]);
+
+  useEffect(() => {
+    if (realtimeStatus === "disabled") return;
+
+    const fallbackTimer = window.setInterval(() => {
+      void load(true);
+    }, realtimeStatus === "connected" ? 60_000 : 15_000);
+
+    return () => window.clearInterval(fallbackTimer);
+  }, [load, realtimeStatus]);
 
   const metrics = useMemo<DashboardMetric[]>(() => {
     if (!data) return [];

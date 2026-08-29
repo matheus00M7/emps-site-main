@@ -1,7 +1,7 @@
 "use client";
 
 import { CheckCircle2, Filter, RefreshCw, Search, Settings2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { ChargerVisualBoard } from "@/components/chargers/ChargerVisualBoard";
 import { EnergyFlowStation } from "@/components/energy/EnergyFlowStation";
@@ -13,6 +13,8 @@ import type {
 } from "@/domain/emps";
 import { normalizeText } from "@/utils/formatters";
 import { api } from "@/services/emps-api";
+import { useRealtime } from "@/components/realtime/RealtimeProvider";
+import { resourceRealtimeRevision } from "@/services/emps-realtime";
 import {
   getActionLabel,
   getRowKey,
@@ -33,34 +35,104 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
   const [loadError, setLoadError] = useState("");
   const [sessionEnergyContext, setSessionEnergyContext] =
     useState<DashboardData | null>(null);
+  const loadGenerationRef = useRef(0);
+  const visibleLoadGenerationRef = useRef(0);
+  const handledConnectionRef = useRef(0);
+  const handledResourceRevisionsRef = useRef<
+    Partial<Record<ApiResource, number>>
+  >({});
+  const loadedResourceRef = useRef<ApiResource | null>(null);
+  const {
+    connectionVersion,
+    status: realtimeStatus,
+    topicRevisions,
+  } = useRealtime();
+  const resourceChangeRevision = resourceRealtimeRevision(
+    resource,
+    topicRevisions
+  );
 
-  async function load() {
-    setLoading(true);
-    setLoadError("");
+  const load = useCallback(async (silent = false) => {
+    const generation = ++loadGenerationRef.current;
+    if (!silent) {
+      visibleLoadGenerationRef.current = generation;
+      setLoading(true);
+      setLoadError("");
+    }
+
     try {
       const [nextRows, energyContext] = await Promise.all([
         api.list(resource),
         resource === "sessoes" ? api.dashboard() : Promise.resolve(null),
       ]);
 
+      if (generation !== loadGenerationRef.current) return;
       setRows(nextRows);
       setSessionEnergyContext(energyContext);
+      setLoadError("");
     } catch (error) {
-      setRows([]);
-      setSessionEnergyContext(null);
-      setLoadError(
-        error instanceof Error
-          ? error.message
-          : `Nao foi possivel carregar ${config.title.toLowerCase()}.`
-      );
+      if (!silent && generation === loadGenerationRef.current) {
+        setRows([]);
+        setSessionEnergyContext(null);
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : `Nao foi possivel carregar ${config.title.toLowerCase()}.`
+        );
+      }
     } finally {
-      setLoading(false);
+      if (!silent && generation === visibleLoadGenerationRef.current) {
+        setLoading(false);
+      }
     }
-  }
+  }, [config.title, resource]);
 
   useEffect(() => {
-    load();
-  }, [resource]);
+    if (loadedResourceRef.current === resource) return;
+    loadedResourceRef.current = resource;
+    handledConnectionRef.current = connectionVersion;
+    handledResourceRevisionsRef.current[resource] = resourceChangeRevision;
+    void load();
+  }, [connectionVersion, load, resource, resourceChangeRevision]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    let shouldRefresh = false;
+    if (connectionVersion > handledConnectionRef.current) {
+      handledConnectionRef.current = connectionVersion;
+      shouldRefresh = true;
+    }
+    const handledResourceRevision =
+      handledResourceRevisionsRef.current[resource] ?? 0;
+    if (resourceChangeRevision > handledResourceRevision) {
+      handledResourceRevisionsRef.current[resource] = resourceChangeRevision;
+      shouldRefresh = true;
+    }
+    if (!shouldRefresh) return;
+
+    const refreshTimer = window.setTimeout(() => {
+      void load(true);
+    }, 180);
+
+    return () => window.clearTimeout(refreshTimer);
+  }, [
+    connectionVersion,
+    load,
+    loading,
+    resource,
+    resourceChangeRevision,
+  ]);
+
+  useEffect(() => {
+    if (realtimeStatus === "disabled") return;
+
+    const fallbackTimer = window.setInterval(() => {
+      void load(true);
+    }, realtimeStatus === "connected" ? 60_000 : 15_000);
+
+    return () => window.clearInterval(fallbackTimer);
+  }, [load, realtimeStatus]);
 
   const filteredRows = useMemo(() => {
     const normalizedQuery = normalizeText(query);

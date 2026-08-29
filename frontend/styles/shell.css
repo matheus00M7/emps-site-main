@@ -494,6 +494,57 @@
   justify-content: flex-end;
 }
 
+.topbar-sync {
+  align-items: center;
+  background: #15181c;
+  border: 1px solid #2d333a;
+  border-radius: 999px;
+  color: #abb3bc;
+  display: inline-flex;
+  font-size: 0.7rem;
+  font-weight: 800;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.topbar-sync i {
+  background: currentColor;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 14%, transparent);
+  display: block;
+  height: 7px;
+  width: 7px;
+}
+
+.topbar-sync--connected {
+  border-color: #2cd28a55;
+  color: var(--green);
+}
+
+.topbar-sync--connecting,
+.topbar-sync--disconnected {
+  border-color: #f5b84b55;
+  color: #f5b84b;
+}
+
+.topbar-sync--connecting i,
+.topbar-sync--disconnected i {
+  animation: sync-status-pulse 1.1s ease-in-out infinite;
+}
+
+.topbar-sync--disabled {
+  color: #87919c;
+}
+
+@keyframes sync-status-pulse {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.72);
+  }
+}
+
 .topbar-emps-brand {
   align-items: center;
   display: inline-flex;

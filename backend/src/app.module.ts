@@ -16,6 +16,7 @@ import { MobileService } from "./mobile.service";
 import { OperationsController } from "./operations.controller";
 import { PaymentGatewayService } from "./payment-gateway.service";
 import { PrismaService } from "./prisma.service";
+import { RealtimeModule } from "./realtime.module";
 import { UsersController } from "./users.controller";
 
 function jwtSecret() {
@@ -44,6 +45,7 @@ function jwtSecret() {
         issuer: "emps-api",
       },
     }),
+    RealtimeModule,
   ],
   controllers: [
     AuthController,

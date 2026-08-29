@@ -14,7 +14,7 @@ O projeto usa Expo SDK 54, React Native e Expo Router, compatível com o Expo Go
 - câmera para QR e alternativa por código digitado;
 - resolução do QR no backend antes de qualquer liberação;
 - intenção de pagamento idempotente;
-- início, atualização periódica e encerramento da sessão pela API;
+- início e encerramento pela API, com invalidação em tempo real via Socket.IO e polling REST de 5 segundos como fallback;
 - sessão ativa recuperável, recibo e histórico sincronizado;
 - deep links `https://app.emps.com.br/c/...` e `emps://charger/...`.
 
@@ -165,6 +165,8 @@ Se o app abrir, mas login e eletropostos falharem:
 6. não substitua o IP por `localhost`.
 
 Se o mapa ficar em branco, confirme que o celular tem internet e consegue acessar `https://tile.openstreetmap.org`. Uma rede corporativa pode bloquear o CDN do MapLibre ou os tiles.
+
+O cliente realtime usa o namespace `${EXPO_PUBLIC_EMPS_API_URL}/realtime`, envia o access token no handshake e escuta `emps:change`. Se o WebSocket for bloqueado, a tela de recarga consulta a API REST a cada cinco segundos e mostra discretamente que está reconectando. Com o canal ao vivo, a conferência periódica da recarga é reduzida para 30 segundos. O contexto confere sessões a cada 60 segundos conectado ou 15 segundos desconectado; entidades de mapa já armazenadas são revistas a cada cinco minutos.
 
 ## Verificações e builds
 

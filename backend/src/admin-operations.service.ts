@@ -24,6 +24,7 @@ import type {
   PostpaidReleaseDto,
 } from "./dtos";
 import { PrismaService } from "./prisma.service";
+import { RealtimeService } from "./realtime.service";
 
 const CASH_CLIENT_ID = "client_cash_walkin";
 
@@ -52,12 +53,14 @@ export class AdminOperationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly charging: ChargingGatewayService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   async sendCommand(chargerId: string, requested: AdminChargerCommand) {
     const charger = await this.prisma.charger.findUnique({
       include: {
         sessions: {
+          include: { client: { select: { userId: true } } },
           orderBy: { startTime: "desc" },
           take: 1,
           where: { status: SessionStatus.ACTIVE },
@@ -72,7 +75,7 @@ export class AdminOperationsService {
         throw new ConflictException("Encerre a recarga ativa antes de solicitar manutenção");
       }
       const processedAt = new Date();
-      await this.prisma.$transaction([
+      const [, , alert] = await this.prisma.$transaction([
         this.prisma.charger.update({
           data: {
             administrativeStatus: ChargerAdministrativeStatus.MAINTENANCE,
@@ -101,6 +104,9 @@ export class AdminOperationsService {
           },
         }),
       ]);
+      this.realtime.publish({ entityId: chargerId, topic: "charger.updated" });
+      this.realtime.publish({ entityId: alert.id, operational: true, topic: "alert.updated" });
+      this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
       return { chargerId, command: requested, processedAt, status: "COMPLETED" };
     }
 
@@ -231,6 +237,25 @@ export class AdminOperationsService {
         });
       }
     });
+    this.realtime.publish({ entityId: chargerId, topic: "charger.updated" });
+    if (requested === "encerrar_carga" && activeSession) {
+      this.realtime.publish({
+        customerId: activeSession.client.userId ?? undefined,
+        entityId: activeSession.id,
+        operational: true,
+        topic: "session.updated",
+      });
+      const payment = await this.prisma.payment.findUnique({ where: { sessionId: activeSession.id } });
+      if (payment) {
+        this.realtime.publish({
+          customerId: activeSession.client.userId ?? undefined,
+          entityId: payment.id,
+          operational: true,
+          topic: "payment.updated",
+        });
+      }
+    }
+    this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
     return { chargerId, command: requested, processedAt, status: "COMPLETED" };
   }
 
@@ -388,8 +413,30 @@ export class AdminOperationsService {
           where: { chargerId },
         });
       });
+      this.realtime.publish({
+        entityId: created.session.id,
+        operational: true,
+        topic: "session.updated",
+      });
+      this.realtime.publish({ entityId: chargerId, topic: "charger.updated" });
+      this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
       throw error;
     }
+    this.realtime.publish({
+      entityId: created.session.id,
+      operational: true,
+      topic: "session.created",
+    });
+    this.realtime.publish({ entityId: chargerId, topic: "charger.updated" });
+    if (prepaidAmount !== null) {
+      const payment = await this.prisma.payment.findUnique({
+        where: { sessionId: created.session.id },
+      });
+      if (payment) {
+        this.realtime.publish({ entityId: payment.id, operational: true, topic: "payment.updated" });
+      }
+    }
+    this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
     return { session: created.session, startedAt };
   }
 
@@ -542,6 +589,16 @@ export class AdminOperationsService {
         where: { id: command.id },
       }),
     ]);
+    const payment = await this.prisma.payment.findUnique({ where: { sessionId } });
+    this.realtime.publish({ entityId: sessionId, operational: true, topic: "session.updated" });
+    if (payment) {
+      this.realtime.publish({ entityId: payment.id, operational: true, topic: "payment.updated" });
+    }
+    this.realtime.publish({
+      entityId: session.chargerId,
+      topic: "charger.updated",
+    });
+    this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
     return {
       carregadorId: session.chargerId,
       chargerStatus: "AVAILABLE",
@@ -562,7 +619,7 @@ export class AdminOperationsService {
     }
     if (payment.status === PaymentStatus.APPROVED) return payment;
     const paidAt = new Date();
-    return this.prisma.$transaction(async (tx) => {
+    const approved = await this.prisma.$transaction(async (tx) => {
       const approved = await tx.payment.update({
         data: { capturedAt: paidAt, paidAt, status: PaymentStatus.APPROVED },
         where: { id: paymentId },
@@ -573,5 +630,24 @@ export class AdminOperationsService {
       });
       return approved;
     });
+    const owner = await this.prisma.chargingSession.findUnique({
+      select: { client: { select: { userId: true } } },
+      where: { id: payment.sessionId },
+    });
+    const customerId = owner?.client.userId ?? undefined;
+    this.realtime.publish({
+      customerId,
+      entityId: paymentId,
+      operational: true,
+      topic: "payment.updated",
+    });
+    this.realtime.publish({
+      customerId,
+      entityId: payment.sessionId,
+      operational: true,
+      topic: "session.updated",
+    });
+    this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
+    return approved;
   }
 }

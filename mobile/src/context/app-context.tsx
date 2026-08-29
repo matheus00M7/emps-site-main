@@ -36,6 +36,13 @@ import {
   createMobileApi,
   type ResolvedQr,
 } from '@/services/mobile-api';
+import {
+  createRealtimeSocket,
+  mapRealtimeChangeToInvalidation,
+  mergeRealtimeInvalidations,
+  parseRealtimeChange,
+  type RealtimeInvalidation,
+} from '@/services/realtime';
 import { parseEmpsQrPublicToken, resolveEmpsQr } from '@/utils/qr';
 
 const STORAGE = createStorageKeys(EMPS_DEMO_MODE);
@@ -55,6 +62,7 @@ type StartSessionInput = {
 type AppContextValue = {
   isDemoMode: boolean;
   isHydrated: boolean;
+  isRealtimeConnected: boolean;
   isStationsLoading: boolean;
   user: ConsumerUser | null;
   activeSession: ChargingSession | null;
@@ -157,6 +165,7 @@ export function getLiveSessionMetrics(
 
 export function AppProvider({ children }: PropsWithChildren) {
   const [isHydrated, setIsHydrated] = useState(false);
+  const [isRealtimeConnected, setIsRealtimeConnected] = useState(false);
   const [isStationsLoading, setIsStationsLoading] = useState(false);
   const [user, setUser] = useState<ConsumerUser | null>(null);
   const [activeSession, setActiveSession] = useState<ChargingSession | null>(null);
@@ -166,6 +175,16 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [qrBindings, setQrBindings] = useState<Record<string, string>>({});
   const activeSessionRef = useRef<ChargingSession | null>(null);
   const historyRef = useRef<ChargingSession[]>(EMPS_DEMO_MODE ? initialHistory : []);
+  const stationsRef = useRef<Station[]>(EMPS_DEMO_MODE ? demoStations : []);
+  const chargersRef = useRef<Charger[]>(EMPS_DEMO_MODE ? demoChargers : []);
+  const recentRealtimeEvents = useRef(new Set<string>());
+  const authenticationEpochRef = useRef(0);
+  const authenticatedUserIdRef = useRef<string | null>(null);
+  const pendingRealtimeInvalidationRef = useRef<RealtimeInvalidation | null>(null);
+  const realtimeFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const realtimeReconciliationRunningRef = useRef(false);
+  const sessionRefreshGenerationRef = useRef(0);
+  const historyRefreshGenerationRef = useRef(0);
   const pendingStart = useRef<PendingStart | null>(null);
   const pendingStopKey = useRef<string | null>(null);
 
@@ -177,14 +196,41 @@ export function AppProvider({ children }: PropsWithChildren) {
     historyRef.current = history;
   }, [history]);
 
+  useEffect(() => {
+    stationsRef.current = stations;
+  }, [stations]);
+
+  useEffect(() => {
+    chargersRef.current = chargers;
+  }, [chargers]);
+
   const clearAuthentication = useCallback(async () => {
-    await storeTokens(null);
-    await AsyncStorage.multiRemove([STORAGE.user, STORAGE.activeSession, STORAGE.history]);
+    authenticationEpochRef.current += 1;
+    sessionRefreshGenerationRef.current += 1;
+    historyRefreshGenerationRef.current += 1;
+    authenticatedUserIdRef.current = null;
+    pendingRealtimeInvalidationRef.current = null;
+    recentRealtimeEvents.current.clear();
+    if (realtimeFlushTimerRef.current) {
+      clearTimeout(realtimeFlushTimerRef.current);
+      realtimeFlushTimerRef.current = null;
+    }
     setUser(null);
     setActiveSession(null);
     setHistory([]);
     setQrBindings({});
+    setIsStationsLoading(false);
+    setIsRealtimeConnected(false);
+    await storeTokens(null);
+    await AsyncStorage.multiRemove([STORAGE.user, STORAGE.activeSession, STORAGE.history]);
   }, []);
+
+  const isAuthenticationCurrent = useCallback(
+    (epoch: number, userId: string | null) =>
+      authenticationEpochRef.current === epoch &&
+      authenticatedUserIdRef.current === userId,
+    [],
+  );
 
   const api = useMemo(
     () =>
@@ -201,6 +247,8 @@ export function AppProvider({ children }: PropsWithChildren) {
   const cacheEntitiesForSessions = useCallback(
     async (sessions: ChargingSession[]) => {
       if (EMPS_DEMO_MODE || sessions.length === 0) return;
+      const authenticationEpoch = authenticationEpochRef.current;
+      const authenticatedUserId = authenticatedUserIdRef.current;
 
       const chargerIds = [...new Set(sessions.map((session) => session.chargerId))];
       const stationIds = [...new Set(sessions.map((session) => session.stationId))];
@@ -214,25 +262,35 @@ export function AppProvider({ children }: PropsWithChildren) {
       const nextStations = stationResults.flatMap((result) =>
         result.status === 'fulfilled' ? [result.value] : [],
       );
+      if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return;
       if (nextChargers.length > 0) setChargers((current) => mergeById(current, nextChargers));
       if (nextStations.length > 0) setStations((current) => mergeById(current, nextStations));
     },
-    [api],
+    [api, isAuthenticationCurrent],
   );
 
   const synchronizeSessions = useCallback(async () => {
     if (EMPS_DEMO_MODE) return;
+    const authenticationEpoch = authenticationEpochRef.current;
+    const authenticatedUserId = authenticatedUserIdRef.current;
+    const sessionGeneration = ++sessionRefreshGenerationRef.current;
+    const historyGeneration = ++historyRefreshGenerationRef.current;
     const [nextActiveSession, nextHistory] = await Promise.all([
       api.activeSession(),
       api.sessionHistory(),
     ]);
-    setActiveSession(nextActiveSession);
-    setHistory(nextHistory);
+    if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return;
+    if (sessionGeneration === sessionRefreshGenerationRef.current) {
+      setActiveSession(nextActiveSession);
+    }
+    if (historyGeneration === historyRefreshGenerationRef.current) {
+      setHistory(nextHistory);
+    }
     await cacheEntitiesForSessions([
       ...(nextActiveSession ? [nextActiveSession] : []),
       ...nextHistory,
     ]);
-  }, [api, cacheEntitiesForSessions]);
+  }, [api, cacheEntitiesForSessions, isAuthenticationCurrent]);
 
   useEffect(() => {
     let mounted = true;
@@ -257,6 +315,8 @@ export function AppProvider({ children }: PropsWithChildren) {
       );
 
       if (EMPS_DEMO_MODE) {
+        authenticationEpochRef.current += 1;
+        authenticatedUserIdRef.current = cachedUser?.id ?? null;
         setUser(cachedUser);
         setActiveSession(cachedSession);
         setHistory(cachedHistory);
@@ -274,6 +334,8 @@ export function AppProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      authenticationEpochRef.current += 1;
+      authenticatedUserIdRef.current = cachedUser.id;
       setUser(cachedUser);
       setActiveSession(cachedSession);
       setHistory(cachedHistory);
@@ -311,6 +373,10 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   const applyAuthentication = useCallback(
     async (result: AuthResult) => {
+      authenticationEpochRef.current += 1;
+      sessionRefreshGenerationRef.current += 1;
+      historyRefreshGenerationRef.current += 1;
+      authenticatedUserIdRef.current = result.user.id;
       await storeTokens(result);
       await AsyncStorage.setItem(STORAGE.user, JSON.stringify(result.user));
       setUser(result.user);
@@ -421,24 +487,30 @@ export function AppProvider({ children }: PropsWithChildren) {
         return demoStations;
       }
 
+      const authenticationEpoch = authenticationEpochRef.current;
+      const authenticatedUserId = authenticatedUserIdRef.current;
       setIsStationsLoading(true);
       try {
         const nearby = await api.nearbyStations(position, radiusKm);
+        if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return [];
         setStations((current) => mergeById(current, nearby));
         const chargerIds = [...new Set(nearby.flatMap((station) => station.chargerIds))];
         const results = await Promise.allSettled(chargerIds.map((id) => api.charger(id)));
         const nearbyChargers = results.flatMap((result) =>
           result.status === 'fulfilled' ? [result.value] : [],
         );
+        if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return [];
         if (nearbyChargers.length > 0) {
           setChargers((current) => mergeById(current, nearbyChargers));
         }
         return nearby;
       } finally {
-        setIsStationsLoading(false);
+        if (isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) {
+          setIsStationsLoading(false);
+        }
       }
     },
-    [api],
+    [api, isAuthenticationCurrent],
   );
 
   const loadStation = useCallback(
@@ -449,18 +521,22 @@ export function AppProvider({ children }: PropsWithChildren) {
         return station;
       }
 
+      const authenticationEpoch = authenticationEpochRef.current;
+      const authenticatedUserId = authenticatedUserIdRef.current;
       const station = await api.station(stationId);
+      if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return station;
       setStations((current) => mergeById(current, [station]));
       const results = await Promise.allSettled(station.chargerIds.map((id) => api.charger(id)));
       const stationChargers = results.flatMap((result) =>
         result.status === 'fulfilled' ? [result.value] : [],
       );
+      if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return station;
       if (stationChargers.length > 0) {
         setChargers((current) => mergeById(current, stationChargers));
       }
       return station;
     },
-    [api],
+    [api, isAuthenticationCurrent],
   );
 
   const loadCharger = useCallback(
@@ -471,13 +547,17 @@ export function AppProvider({ children }: PropsWithChildren) {
         return charger;
       }
 
+      const authenticationEpoch = authenticationEpochRef.current;
+      const authenticatedUserId = authenticatedUserIdRef.current;
       const charger = await api.charger(chargerId);
+      if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return charger;
       setChargers((current) => mergeById(current, [charger]));
       const station = await api.station(charger.stationId);
+      if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return charger;
       setStations((current) => mergeById(current, [station]));
       return charger;
     },
-    [api],
+    [api, isAuthenticationCurrent],
   );
 
   const resolveQrCode = useCallback(
@@ -585,6 +665,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         spendingLimit,
       });
       pendingStart.current = null;
+      sessionRefreshGenerationRef.current += 1;
       setActiveSession(session);
       return session;
     },
@@ -593,19 +674,277 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   const refreshActiveSession = useCallback(async () => {
     if (EMPS_DEMO_MODE) return activeSessionRef.current;
+    const authenticationEpoch = authenticationEpochRef.current;
+    const authenticatedUserId = authenticatedUserIdRef.current;
+    const generation = ++sessionRefreshGenerationRef.current;
     const nextSession = await api.activeSession();
+    if (
+      !isAuthenticationCurrent(authenticationEpoch, authenticatedUserId) ||
+      generation !== sessionRefreshGenerationRef.current
+    ) {
+      return activeSessionRef.current;
+    }
     setActiveSession(nextSession);
     if (nextSession) await cacheEntitiesForSessions([nextSession]);
     return nextSession;
-  }, [api, cacheEntitiesForSessions]);
+  }, [api, cacheEntitiesForSessions, isAuthenticationCurrent]);
 
   const refreshHistory = useCallback(async () => {
     if (EMPS_DEMO_MODE) return historyRef.current;
+    const authenticationEpoch = authenticationEpochRef.current;
+    const authenticatedUserId = authenticatedUserIdRef.current;
+    const generation = ++historyRefreshGenerationRef.current;
     const nextHistory = await api.sessionHistory();
+    if (
+      !isAuthenticationCurrent(authenticationEpoch, authenticatedUserId) ||
+      generation !== historyRefreshGenerationRef.current
+    ) {
+      return historyRef.current;
+    }
     setHistory(nextHistory);
     await cacheEntitiesForSessions(nextHistory);
     return nextHistory;
-  }, [api, cacheEntitiesForSessions]);
+  }, [api, cacheEntitiesForSessions, isAuthenticationCurrent]);
+
+  const refreshCachedEntities = useCallback(async () => {
+    if (EMPS_DEMO_MODE) return;
+    const authenticationEpoch = authenticationEpochRef.current;
+    const authenticatedUserId = authenticatedUserIdRef.current;
+    const stationIds = [...new Set(stationsRef.current.map((station) => station.id))];
+    const chargerIds = [...new Set(chargersRef.current.map((charger) => charger.id))];
+    const [stationResults, chargerResults] = await Promise.all([
+      Promise.allSettled(stationIds.map((id) => api.station(id))),
+      Promise.allSettled(chargerIds.map((id) => api.charger(id))),
+    ]);
+    const nextStations = stationResults.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : [],
+    );
+    const nextChargers = chargerResults.flatMap((result) =>
+      result.status === 'fulfilled' ? [result.value] : [],
+    );
+    if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return;
+    if (nextStations.length > 0) setStations((current) => mergeById(current, nextStations));
+    if (nextChargers.length > 0) setChargers((current) => mergeById(current, nextChargers));
+  }, [api, isAuthenticationCurrent]);
+
+  const flushRealtimeInvalidations = useCallback(async function flushPendingRealtimeInvalidations() {
+    if (realtimeReconciliationRunningRef.current) return;
+    realtimeReconciliationRunningRef.current = true;
+    if (realtimeFlushTimerRef.current) {
+      clearTimeout(realtimeFlushTimerRef.current);
+      realtimeFlushTimerRef.current = null;
+    }
+
+    try {
+      while (pendingRealtimeInvalidationRef.current) {
+        const invalidation = pendingRealtimeInvalidationRef.current;
+        pendingRealtimeInvalidationRef.current = null;
+        const authenticatedUserId = authenticatedUserIdRef.current;
+        if (!authenticatedUserId) continue;
+
+        const active = activeSessionRef.current;
+        const cachedChargerIds = new Set(
+          chargersRef.current.map((charger) => charger.id),
+        );
+        const cachedStationIds = new Set(
+          stationsRef.current.map((station) => station.id),
+        );
+        const chargerIds = invalidation.chargerIds.filter(
+          (id) => cachedChargerIds.has(id) || active?.chargerId === id,
+        );
+        const stationIds = invalidation.stationIds.filter(
+          (id) => cachedStationIds.has(id) || active?.stationId === id,
+        );
+        const refreshSessions =
+          invalidation.refreshSessions ||
+          invalidation.refreshHistory ||
+          chargerIds.some((id) => active?.chargerId === id);
+
+        const refreshes: Promise<unknown>[] = [];
+        if (refreshSessions) refreshes.push(synchronizeSessions());
+        refreshes.push(...chargerIds.map((id) => loadCharger(id)));
+        refreshes.push(...stationIds.map((id) => loadStation(id)));
+        if (invalidation.refreshCachedEntities) {
+          refreshes.push(refreshCachedEntities());
+        }
+
+        const results = await Promise.allSettled(refreshes);
+        if (
+          authenticatedUserIdRef.current === authenticatedUserId &&
+          results.some((result) => result.status === 'rejected')
+        ) {
+          console.warn('[emps-realtime] uma invalidação REST ficou pendente');
+        }
+      }
+    } finally {
+      realtimeReconciliationRunningRef.current = false;
+      if (
+        pendingRealtimeInvalidationRef.current &&
+        !realtimeFlushTimerRef.current
+      ) {
+        realtimeFlushTimerRef.current = setTimeout(() => {
+          realtimeFlushTimerRef.current = null;
+          void flushPendingRealtimeInvalidations();
+        }, 0);
+      }
+    }
+  }, [loadCharger, loadStation, refreshCachedEntities, synchronizeSessions]);
+
+  const enqueueRealtimeInvalidation = useCallback(
+    (invalidation: RealtimeInvalidation) => {
+      pendingRealtimeInvalidationRef.current = mergeRealtimeInvalidations(
+        pendingRealtimeInvalidationRef.current,
+        invalidation,
+      );
+      if (realtimeReconciliationRunningRef.current) return;
+      if (realtimeFlushTimerRef.current) {
+        clearTimeout(realtimeFlushTimerRef.current);
+      }
+      realtimeFlushTimerRef.current = setTimeout(() => {
+        realtimeFlushTimerRef.current = null;
+        void flushRealtimeInvalidations();
+      }, 120);
+    },
+    [flushRealtimeInvalidations],
+  );
+
+  const handleRealtimeChange = useCallback(
+    (payload: unknown) => {
+      const parsed = parseRealtimeChange(payload);
+      if (parsed) {
+        if (
+          parsed.customerId &&
+          parsed.customerId !== authenticatedUserIdRef.current
+        ) {
+          return;
+        }
+        if (recentRealtimeEvents.current.has(parsed.eventId)) return;
+        recentRealtimeEvents.current.add(parsed.eventId);
+        if (recentRealtimeEvents.current.size > 200) {
+          const oldestEventId = recentRealtimeEvents.current.values().next().value;
+          if (oldestEventId) recentRealtimeEvents.current.delete(oldestEventId);
+        }
+      }
+
+      enqueueRealtimeInvalidation(mapRealtimeChangeToInvalidation(payload));
+    },
+    [enqueueRealtimeInvalidation],
+  );
+
+  useEffect(() => {
+    if (EMPS_DEMO_MODE || !isHydrated || !user?.id || !EMPS_API_URL) return;
+
+    let disposed = false;
+    let socket: ReturnType<typeof createRealtimeSocket> | null = null;
+    let authenticationRetry: ReturnType<typeof setTimeout> | null = null;
+    const readRealtimeToken = async () => {
+      try {
+        return await readSecret(STORAGE.accessToken);
+      } catch (error) {
+        console.warn('[emps-realtime] não foi possível ler o access token', error);
+        return null;
+      }
+    };
+    const connect = async () => {
+      const token = await readRealtimeToken();
+      if (disposed || !token) return;
+
+      socket = createRealtimeSocket(EMPS_API_URL, token);
+      const onConnect = () => setIsRealtimeConnected(false);
+      const onReady = () => {
+        if (authenticationRetry) clearTimeout(authenticationRetry);
+        authenticationRetry = null;
+        setIsRealtimeConnected(true);
+        handleRealtimeChange(null);
+      };
+      const onDisconnect = (reason: string) => {
+        setIsRealtimeConnected(false);
+        if (reason !== 'io server disconnect' || disposed) return;
+        void synchronizeSessions()
+          .catch(() => undefined)
+          .then(async () => {
+            const nextToken = await readRealtimeToken();
+            if (
+              !disposed &&
+              socket &&
+              nextToken &&
+              authenticatedUserIdRef.current
+            ) {
+              socket.auth = { token: nextToken };
+              socket.connect();
+            }
+          });
+      };
+      const onConnectError = () => {
+        setIsRealtimeConnected(false);
+        if (disposed || !socket || socket.active || authenticationRetry) return;
+        authenticationRetry = setTimeout(async () => {
+          authenticationRetry = null;
+          const nextToken = await readRealtimeToken();
+          if (!disposed && socket && nextToken) {
+            socket.auth = { token: nextToken };
+            socket.connect();
+          }
+        }, 3_000);
+      };
+      const onChange = (payload: unknown) => {
+        handleRealtimeChange(payload);
+      };
+      const onReconnectAttempt = async () => {
+        const nextToken = await readRealtimeToken();
+        if (!disposed && socket && nextToken) socket.auth = { token: nextToken };
+      };
+
+      socket.on('connect', onConnect);
+      socket.on('disconnect', onDisconnect);
+      socket.on('connect_error', onConnectError);
+      socket.on('emps:ready', onReady);
+      socket.on('emps:change', onChange);
+      socket.io.on('reconnect_attempt', onReconnectAttempt);
+      socket.connect();
+    };
+
+    void connect();
+    return () => {
+      disposed = true;
+      if (authenticationRetry) clearTimeout(authenticationRetry);
+      if (socket) {
+        socket.io.removeAllListeners('reconnect_attempt');
+        socket.removeAllListeners();
+        socket.disconnect();
+      }
+    };
+  }, [handleRealtimeChange, isHydrated, synchronizeSessions, user?.id]);
+
+  useEffect(() => {
+    if (EMPS_DEMO_MODE || !isHydrated || !user?.id) return;
+    const sessionSafetyInterval = setInterval(
+      () =>
+        enqueueRealtimeInvalidation({
+          chargerIds: [],
+          refreshCachedEntities: false,
+          refreshHistory: true,
+          refreshSessions: true,
+          stationIds: [],
+        }),
+      isRealtimeConnected ? 60_000 : 15_000,
+    );
+    const entitySafetyInterval = setInterval(
+      () =>
+        enqueueRealtimeInvalidation({
+          chargerIds: [],
+          refreshCachedEntities: true,
+          refreshHistory: false,
+          refreshSessions: false,
+          stationIds: [],
+        }),
+      5 * 60_000,
+    );
+    return () => {
+      clearInterval(sessionSafetyInterval);
+      clearInterval(entitySafetyInterval);
+    };
+  }, [enqueueRealtimeInvalidation, isHydrated, isRealtimeConnected, user?.id]);
 
   const finishSession = useCallback(async () => {
     if (!activeSession) throw new Error('Nenhuma recarga em andamento.');
@@ -633,6 +972,8 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
     const completed = await api.stopCharging(activeSession.id, pendingStopKey.current);
     pendingStopKey.current = null;
+    sessionRefreshGenerationRef.current += 1;
+    historyRefreshGenerationRef.current += 1;
     setHistory((current) => [completed, ...current.filter((item) => item.id !== completed.id)]);
     setActiveSession(null);
     return completed;
@@ -642,6 +983,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     () => ({
       isDemoMode: EMPS_DEMO_MODE,
       isHydrated,
+      isRealtimeConnected,
       isStationsLoading,
       user,
       activeSession,
@@ -674,6 +1016,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       hasQrBinding,
       history,
       isHydrated,
+      isRealtimeConnected,
       isStationsLoading,
       loadCharger,
       loadNearbyStations,

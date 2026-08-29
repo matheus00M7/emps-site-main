@@ -43,6 +43,7 @@ import {
 } from "./mobile.utils";
 import { PaymentGatewayService } from "./payment-gateway.service";
 import { PrismaService } from "./prisma.service";
+import { RealtimeService } from "./realtime.service";
 
 const activeQrWhere = (now = new Date()): Prisma.QrBindingWhereInput => ({
   OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
@@ -124,6 +125,7 @@ export class MobileService {
     private readonly jwt: JwtService,
     private readonly payments: PaymentGatewayService,
     private readonly charging: ChargingGatewayService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   private refreshTokenExpiry() {
@@ -194,7 +196,14 @@ export class MobileService {
       }
       throw error;
     }
-    return this.issueAuthentication(user);
+    const authentication = await this.issueAuthentication(user);
+    this.realtime.publish({
+      customerId: user.id,
+      entityId: user.client!.id,
+      operational: true,
+      topic: "customer.updated",
+    });
+    return authentication;
   }
 
   async login(dto: MobileLoginDto) {
@@ -475,6 +484,12 @@ export class MobileService {
       },
       where: { id: intent.id },
     });
+    this.realtime.publish({
+      customerId: userId,
+      entityId: updated.id,
+      operational: true,
+      topic: "payment.updated",
+    });
     return this.presentPaymentIntent(updated, gateway.clientSecret);
   }
 
@@ -707,13 +722,31 @@ export class MobileService {
         error instanceof BadGatewayException
           ? error.message
           : "Falha de comunicação com o carregador",
+        userId,
       );
       throw error;
     }
-    return this.presentSession(await this.fetchSession(createdId, user.client.id));
+    const created = this.presentSession(await this.fetchSession(createdId, user.client.id));
+    this.realtime.publish({
+      customerId: userId,
+      entityId: createdId,
+      operational: true,
+      topic: "session.created",
+    });
+    this.realtime.publish({
+      entityId: binding.chargerId,
+      topic: "charger.updated",
+    });
+    this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
+    return created;
   }
 
-  private async failStart(sessionId: string, commandId: string, reason: string) {
+  private async failStart(
+    sessionId: string,
+    commandId: string,
+    reason: string,
+    customerId: string,
+  ) {
     const session = await this.prisma.chargingSession.findUnique({ where: { id: sessionId } });
     if (!session) return;
     await this.prisma.$transaction([
@@ -738,6 +771,17 @@ export class MobileService {
         where: { chargerId: session.chargerId },
       }),
     ]);
+    this.realtime.publish({
+      customerId,
+      entityId: sessionId,
+      operational: true,
+      topic: "session.updated",
+    });
+    this.realtime.publish({
+      entityId: session.chargerId,
+      topic: "charger.updated",
+    });
+    this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
   }
 
   async activeSession(userId: string) {
@@ -938,6 +982,25 @@ export class MobileService {
       });
     });
     session = await this.fetchSession(sessionId, user.client.id);
+    this.realtime.publish({
+      customerId: userId,
+      entityId: session.id,
+      operational: true,
+      topic: "session.updated",
+    });
+    if (session.payment?.id) {
+      this.realtime.publish({
+        customerId: userId,
+        entityId: session.payment.id,
+        operational: true,
+        topic: "payment.updated",
+      });
+    }
+    this.realtime.publish({
+      entityId: session.chargerId,
+      topic: "charger.updated",
+    });
+    this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
     return this.presentSession(session);
   }
 
@@ -998,6 +1061,19 @@ export class MobileService {
         where: { id: record!.id },
       });
     });
+    const linkedIntent = await this.prisma.paymentIntent.findFirst({
+      include: { client: { select: { userId: true } } },
+      where: { provider: "STRIPE", providerIntentId: object.id },
+    });
+    if (linkedIntent) {
+      this.realtime.publish({
+        customerId: linkedIntent.client.userId ?? undefined,
+        entityId: linkedIntent.id,
+        operational: true,
+        topic: "payment.updated",
+      });
+      this.realtime.publish({ entityId: "summary", operational: true, topic: "dashboard.updated" });
+    }
     return { received: true };
   }
 }

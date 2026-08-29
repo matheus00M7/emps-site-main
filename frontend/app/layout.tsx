@@ -12,6 +12,7 @@ import "@/styles/settings.css";
 import "@/styles/login.css";
 import "@/styles/animations.css";
 import "@/styles/responsive.css";
+import { RealtimeProvider } from "@/components/realtime/RealtimeProvider";
 
 export const metadata: Metadata = {
   title: {
@@ -26,5 +27,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="pt-BR"><body>{children}</body></html>;
+  return (
+    <html lang="pt-BR">
+      <body>
+        <RealtimeProvider>{children}</RealtimeProvider>
+      </body>
+    </html>
+  );
 }

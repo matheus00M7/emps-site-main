@@ -185,7 +185,12 @@ export function createMobileApi({
     try {
       return await refreshInFlight;
     } catch (error) {
-      await onAuthenticationLost();
+      if (
+        error instanceof ApiRequestError &&
+        (error.status === 400 || error.status === 401)
+      ) {
+        await onAuthenticationLost();
+      }
       throw error;
     } finally {
       refreshInFlight = null;
@@ -206,7 +211,18 @@ export function createMobileApi({
         error.status === 401
       ) {
         const tokens = await refreshAuthentication();
-        return execute<T>(path, { ...init, retryAuthentication: false }, tokens.accessToken);
+        try {
+          return await execute<T>(
+            path,
+            { ...init, retryAuthentication: false },
+            tokens.accessToken,
+          );
+        } catch (retryError) {
+          if (retryError instanceof ApiRequestError && retryError.status === 401) {
+            await onAuthenticationLost();
+          }
+          throw retryError;
+        }
       }
       throw error;
     }

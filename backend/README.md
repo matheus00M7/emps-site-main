@@ -134,6 +134,28 @@ POST /mobile/v1/charging-sessions/:id/stop
 
 As operações mutáveis de pagamento e recarga recebem `Idempotency-Key`. Repetir a mesma operação com a mesma chave não deve criar cobrança ou sessão duplicada.
 
+## Atualizações em tempo real
+
+O Socket.IO usa o mesmo servidor e JWT da API no namespace `/realtime`. O cliente deve enviar o access token em `auth.token` ou no header `Authorization: Bearer <token>`. Conexões sem JWT válido são recusadas antes de entrar nas salas.
+
+O servidor envia `emps:change` com um contrato mínimo, sem nomes, e-mails ou dados financeiros:
+
+```json
+{
+  "eventId": "uuid",
+  "topic": "session.updated",
+  "entityId": "session-id",
+  "occurredAt": "2026-08-28T18:30:00.000Z",
+  "customerId": "user-id-quando-aplicável"
+}
+```
+
+Os tópicos são `session.created`, `session.updated`, `payment.updated`, `charger.updated`, `station.updated`, `alert.updated`, `customer.updated` e `dashboard.updated`. O evento é apenas um sinal para o cliente refazer a consulta REST; ele não replica registros do banco.
+
+Todo usuário autenticado entra em `authenticated`. Administradores e operadores também entram em `operations`; motoristas entram somente em sua sala `customer:<sub>`. Mudanças específicas de um motorista são entregues apenas à sala dele e à operação. O servidor só confirma a inscrição nas salas com `emps:ready`; até esse evento, o cliente mantém a reconciliação REST ativa.
+
+O emissor atual atende uma única instância da API. Antes de executar mais de uma réplica, configure um adaptador Socket.IO compartilhado (por exemplo, Redis) e uma entrega durável/outbox para os eventos. O polling de segurança dos clientes continua reconciliando o estado, mas não substitui essa configuração de escala.
+
 ## Pagamentos
 
 O padrão é seguro para desenvolvimento:

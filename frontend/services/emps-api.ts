@@ -24,12 +24,22 @@ import {
 
 const SESSION_KEY = "emps_front_session:v2";
 const LEGACY_SESSION_KEY = "emps_front_session";
+const API_TIMEOUT_MS = 12_000;
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(
   /\/$/,
   ""
 );
 
+export const empsApiUrl = API_URL;
+export const EMPS_SESSION_CHANGED_EVENT = "emps:session-changed";
+
 export const isDemoMode = process.env.NEXT_PUBLIC_EMPS_DEMO_MODE === "true";
+
+function notifySessionChanged() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(EMPS_SESSION_CHANGED_EVENT));
+  }
+}
 
 const resourceEndpoints: Record<ApiResource, string> = {
   carregadores: "/chargers",
@@ -107,6 +117,8 @@ export const frontSession = {
       window.sessionStorage.removeItem(LEGACY_SESSION_KEY);
     } catch {
       // A sessao continua valida para a requisicao atual mesmo sem persistencia.
+    } finally {
+      notifySessionChanged();
     }
   },
   clear() {
@@ -116,6 +128,8 @@ export const frontSession = {
       window.sessionStorage.removeItem(LEGACY_SESSION_KEY);
     } catch {
       // O navegador pode bloquear storage em contextos privados ou incorporados.
+    } finally {
+      notifySessionChanged();
     }
   },
 };
@@ -182,16 +196,29 @@ async function request(
   if (session?.token) headers.set("Authorization", `Bearer ${session.token}`);
 
   let response: Response;
+  const timeoutController = new AbortController();
+  const timeout = window.setTimeout(
+    () => timeoutController.abort(),
+    API_TIMEOUT_MS
+  );
   try {
     response = await fetch(`${API_URL}${path}`, {
       ...init,
       cache: "no-store",
       headers,
+      signal: init.signal ?? timeoutController.signal,
     });
   } catch {
+    if (timeoutController.signal.aborted) {
+      throw new Error(
+        "A API EMPS demorou para responder. Verifique a rede e tente novamente."
+      );
+    }
     throw new Error(
       `Nao foi possivel conectar a API EMPS em ${API_URL}. Verifique se o backend esta em execucao.`
     );
+  } finally {
+    window.clearTimeout(timeout);
   }
 
   const payload = await readResponse(response);

@@ -34,6 +34,7 @@ export default function ChargingScreen() {
     getCharger,
     getStation,
     isDemoMode,
+    isRealtimeConnected,
     refreshActiveSession,
   } = useApp();
   const [now, setNow] = useState(() => Date.now());
@@ -56,12 +57,15 @@ export default function ChargingScreen() {
         .catch(() => active && setTelemetryConnected(false));
     };
     refresh();
-    const interval = setInterval(refresh, 5_000);
+    const interval = setInterval(
+      refresh,
+      isRealtimeConnected ? 30_000 : 5_000,
+    );
     return () => {
       active = false;
       clearInterval(interval);
     };
-  }, [isDemoMode, refreshActiveSession]);
+  }, [isDemoMode, isRealtimeConnected, refreshActiveSession]);
 
   const metrics = useMemo(
     () =>
@@ -182,12 +186,23 @@ export default function ChargingScreen() {
           </View>
 
           <View style={styles.telemetryRow}>
-            <View style={styles.telemetryDot} />
+            <View
+              style={[
+                styles.telemetryDot,
+                !isDemoMode && !isRealtimeConnected && styles.telemetryDotFallback,
+                !isDemoMode &&
+                  !isRealtimeConnected &&
+                  !telemetryConnected &&
+                  styles.telemetryDotDisconnected,
+              ]}
+            />
             <Text style={styles.telemetryText}>
               {isDemoMode
                 ? 'Telemetria atualizada agora · Dados demonstrativos'
-                : telemetryConnected
-                  ? 'Telemetria sincronizada com a EMPS'
+                : isRealtimeConnected
+                  ? 'Tempo real conectado · dados confirmados pela EMPS'
+                  : telemetryConnected
+                    ? 'Tempo real reconectando · atualização REST a cada 5 s'
                   : 'Sem atualização recente · tentando reconectar'}
             </Text>
           </View>
@@ -269,6 +284,8 @@ const styles = StyleSheet.create({
   offlineText: { color: Colors.textMuted, fontFamily: Fonts.regular, fontSize: 8, lineHeight: 13, marginTop: 2 },
   telemetryRow: { alignItems: 'center', flexDirection: 'row', gap: 6, justifyContent: 'center' },
   telemetryDot: { backgroundColor: Colors.green, borderRadius: 3, height: 6, width: 6 },
+  telemetryDotFallback: { backgroundColor: Colors.yellow },
+  telemetryDotDisconnected: { backgroundColor: Colors.danger },
   telemetryText: { color: Colors.textFaint, fontFamily: Fonts.regular, fontSize: 8 },
   modalOverlay: {
     alignItems: 'center',
