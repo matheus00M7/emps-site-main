@@ -393,6 +393,7 @@ export const dashboardData: DashboardData = {
   energyFlow: {
     batteryMode: "discharging",
     batteryPowerKw: 8.4,
+    batterySocPercent: 68,
     chargerPowerKw: 8.4,
     chargerSources: ["battery"],
     gridPowerKw: 0,

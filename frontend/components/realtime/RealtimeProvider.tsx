@@ -12,10 +12,12 @@ import {
 } from "react";
 import { io, type Socket } from "socket.io-client";
 import {
+  api,
   EMPS_SESSION_CHANGED_EVENT,
   empsApiUrl,
   frontSession,
   isDemoMode,
+  millisecondsUntilSessionRefresh,
 } from "@/services/emps-api";
 import {
   createRealtimeTopicRevisions,
@@ -46,6 +48,7 @@ const RealtimeContext = createContext<RealtimeContextValue>({
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const socketRef = useRef<Socket | null>(null);
+  const refreshTimerRef = useRef<number | null>(null);
   const recentEventsRef = useRef(new Set<string>());
   const [changeRevision, setChangeRevision] = useState(0);
   const [connectionVersion, setConnectionVersion] = useState(0);
@@ -57,11 +60,22 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   );
 
   const disconnect = useCallback(() => {
+    if (refreshTimerRef.current !== null) {
+      window.clearTimeout(refreshTimerRef.current);
+      refreshTimerRef.current = null;
+    }
     const socket = socketRef.current;
     socketRef.current = null;
     socket?.removeAllListeners();
     socket?.disconnect();
   }, []);
+
+  const recoverAuthentication = useCallback(() => {
+    disconnect();
+    void api.refreshSession().catch(() => {
+      setStatus("disconnected");
+    });
+  }, [disconnect]);
 
   const synchronizeConnection = useCallback(() => {
     disconnect();
@@ -89,6 +103,13 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     });
 
     socketRef.current = socket;
+    const refreshDelay = millisecondsUntilSessionRefresh(session.token);
+    if (refreshDelay !== null) {
+      refreshTimerRef.current = window.setTimeout(
+        recoverAuthentication,
+        refreshDelay
+      );
+    }
     socket.on("connect", () => setStatus("connecting"));
     socket.on("emps:ready", () => {
       setStatus("connected");
@@ -97,9 +118,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     socket.on("disconnect", (reason) => {
       setStatus("disconnected");
       if (reason === "io server disconnect") {
-        disconnect();
-        frontSession.clear();
-        window.location.replace("/login");
+        recoverAuthentication();
       }
     });
     socket.on("connect_error", (error) => {
@@ -108,9 +127,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         error as Error & { data?: { code?: unknown } }
       ).data?.code;
       if (code === "UNAUTHORIZED") {
-        disconnect();
-        frontSession.clear();
-        window.location.replace("/login");
+        recoverAuthentication();
       }
     });
     socket.on(REALTIME_CHANGE_EVENT, (payload: unknown) => {
@@ -128,7 +145,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         [change.topic]: current[change.topic] + 1,
       }));
     });
-  }, [disconnect]);
+  }, [disconnect, recoverAuthentication]);
 
   useEffect(() => {
     synchronizeConnection();

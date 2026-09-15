@@ -4,11 +4,9 @@ import { CheckCircle2, Filter, RefreshCw, Search, Settings2 } from "lucide-react
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppShell } from "@/components/shell/AppShell";
 import { ChargerVisualBoard } from "@/components/chargers/ChargerVisualBoard";
-import { EnergyFlowStation } from "@/components/energy/EnergyFlowStation";
 import type {
   ApiResource,
   Charger,
-  DashboardData,
   ResourceRow,
 } from "@/domain/emps";
 import { normalizeText } from "@/utils/formatters";
@@ -33,8 +31,6 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState("");
   const [loadError, setLoadError] = useState("");
-  const [sessionEnergyContext, setSessionEnergyContext] =
-    useState<DashboardData | null>(null);
   const loadGenerationRef = useRef(0);
   const visibleLoadGenerationRef = useRef(0);
   const handledConnectionRef = useRef(0);
@@ -51,7 +47,6 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
     resource,
     topicRevisions
   );
-
   const load = useCallback(async (silent = false) => {
     const generation = ++loadGenerationRef.current;
     if (!silent) {
@@ -61,19 +56,14 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
     }
 
     try {
-      const [nextRows, energyContext] = await Promise.all([
-        api.list(resource),
-        resource === "sessoes" ? api.dashboard() : Promise.resolve(null),
-      ]);
+      const nextRows = await api.list(resource);
 
       if (generation !== loadGenerationRef.current) return;
       setRows(nextRows);
-      setSessionEnergyContext(energyContext);
       setLoadError("");
     } catch (error) {
       if (!silent && generation === loadGenerationRef.current) {
         setRows([]);
-        setSessionEnergyContext(null);
         setLoadError(
           error instanceof Error
             ? error.message
@@ -258,15 +248,6 @@ export function OperationalPage({ resource }: { resource: ApiResource }) {
 
       {resource === "carregadores" && !loading && (
         <ChargerVisualBoard chargers={filteredRows as Charger[]} compact />
-      )}
-
-      {resource === "sessoes" && !loading && sessionEnergyContext && (
-        <div className="session-energy-flow">
-          <EnergyFlowStation
-            chargers={sessionEnergyContext.carregadores}
-            telemetry={sessionEnergyContext.energyFlow}
-          />
-        </div>
       )}
 
       <section className="panel table-panel">

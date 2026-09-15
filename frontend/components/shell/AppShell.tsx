@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  Menu,
-  X,
-} from "lucide-react";
+import { Menu, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -115,9 +112,7 @@ export function AppShell({
                   key={item.label}
                   type="button"
                   className="nav-item sems-shell-item"
-                  onClick={() => {
-                    setEmpsMenuOpen(false);
-                  }}
+                  onClick={() => setEmpsMenuOpen(false)}
                   title={item.label}
                   aria-label={item.label}
                 >
@@ -247,4 +242,3 @@ export function AppShell({
     </div>
   );
 }
-

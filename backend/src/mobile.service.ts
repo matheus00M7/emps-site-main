@@ -59,6 +59,7 @@ const chargerRelations = {
 
 const stationRelations = {
   chargers: {
+    where: { administrativeStatus: ChargerAdministrativeStatus.ENABLED },
     include: {
       liveStatus: true,
       qrBindings: { orderBy: { createdAt: "desc" as const }, take: 1 },
@@ -330,6 +331,7 @@ export class MobileService {
     const stations = await this.prisma.station.findMany({
       include: stationRelations,
       where: {
+        chargers: { some: { administrativeStatus: ChargerAdministrativeStatus.ENABLED } },
         latitude: { not: null },
         longitude: { not: null },
         status: StationStatus.ACTIVE,
@@ -351,16 +353,23 @@ export class MobileService {
   async station(stationId: string) {
     const station = await this.prisma.station.findFirst({
       include: stationRelations,
-      where: { id: stationId, status: StationStatus.ACTIVE },
+      where: {
+        chargers: { some: { administrativeStatus: ChargerAdministrativeStatus.ENABLED } },
+        id: stationId,
+        status: StationStatus.ACTIVE,
+      },
     });
     if (!station) throw new NotFoundException("Eletroposto não encontrado");
     return this.presentStation(station);
   }
 
   async charger(chargerId: string) {
-    const charger = await this.prisma.charger.findUnique({
+    const charger = await this.prisma.charger.findFirst({
       include: chargerRelations,
-      where: { id: chargerId },
+      where: {
+        administrativeStatus: ChargerAdministrativeStatus.ENABLED,
+        id: chargerId,
+      },
     });
     if (!charger) throw new NotFoundException("Carregador não encontrado");
     return this.presentCharger(charger);

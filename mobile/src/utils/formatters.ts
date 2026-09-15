@@ -1,14 +1,22 @@
 import type { Coordinate } from '@/domain/models';
 
-export const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+function finiteOrZero(value: number | null | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
 
-export const formatEnergy = (value: number) => `${value.toFixed(2).replace('.', ',')} kWh`;
+export const formatCurrency = (value: number | null | undefined) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+    finiteOrZero(value),
+  );
 
-export const formatPower = (value: number) => `${value.toFixed(1).replace('.', ',')} kW`;
+export const formatEnergy = (value: number | null | undefined) =>
+  `${finiteOrZero(value).toFixed(2).replace('.', ',')} kWh`;
 
-export function formatDuration(totalSeconds: number) {
-  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+export const formatPower = (value: number | null | undefined) =>
+  `${finiteOrZero(value).toFixed(1).replace('.', ',')} kW`;
+
+export function formatDuration(totalSeconds: number | null | undefined) {
+  const safeSeconds = Math.max(0, Math.floor(finiteOrZero(totalSeconds)));
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
   const seconds = safeSeconds % 60;
@@ -21,8 +29,8 @@ export function formatDuration(totalSeconds: number) {
   return `${seconds}s`;
 }
 
-export function formatTimer(totalSeconds: number) {
-  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
+export function formatTimer(totalSeconds: number | null | undefined) {
+  const safeSeconds = Math.max(0, Math.floor(finiteOrZero(totalSeconds)));
   const hours = Math.floor(safeSeconds / 3600);
   const minutes = Math.floor((safeSeconds % 3600) / 60);
   const seconds = safeSeconds % 60;
@@ -56,7 +64,9 @@ export function distanceInKm(from: Coordinate, to: Coordinate) {
   return radiusKm * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
 }
 
-export const formatDistance = (distanceKm: number) =>
-  distanceKm < 1
-    ? `${Math.round(distanceKm * 1000)} m`
-    : `${distanceKm.toFixed(1).replace('.', ',')} km`;
+export const formatDistance = (distanceKm: number | null | undefined) => {
+  const safeDistance = Math.max(0, finiteOrZero(distanceKm));
+  return safeDistance < 1
+    ? `${Math.round(safeDistance * 1000)} m`
+    : `${safeDistance.toFixed(1).replace('.', ',')} km`;
+};

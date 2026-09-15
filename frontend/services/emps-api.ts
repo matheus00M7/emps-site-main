@@ -2,7 +2,11 @@
 
 import type {
   ApiResource,
+  ChargerProvisioning,
+  ChargerProvisioningStationOption,
   ChargerCommand,
+  ClaimChargerProvisioningRequest,
+  CreateChargerProvisioningRequest,
   DashboardData,
   FrontSession,
   ManualReleaseRequest,
@@ -25,6 +29,7 @@ import {
 const SESSION_KEY = "emps_front_session:v2";
 const LEGACY_SESSION_KEY = "emps_front_session";
 const API_TIMEOUT_MS = 12_000;
+const REFRESH_LOCK_NAME = "emps:web-session-refresh";
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001").replace(
   /\/$/,
   ""
@@ -34,6 +39,34 @@ export const empsApiUrl = API_URL;
 export const EMPS_SESSION_CHANGED_EVENT = "emps:session-changed";
 
 export const isDemoMode = process.env.NEXT_PUBLIC_EMPS_DEMO_MODE === "true";
+
+let refreshInFlight: Promise<FrontSession> | null = null;
+let sessionGeneration = 0;
+
+class SessionExpiredError extends Error {}
+
+function accessTokenExpiresAt(token: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const encodedPayload = token.split(".")[1];
+    if (!encodedPayload) return null;
+    const normalized = encodedPayload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "="
+    );
+    const payload = JSON.parse(window.atob(padded)) as { exp?: unknown };
+    return typeof payload.exp === "number" ? payload.exp * 1_000 : null;
+  } catch {
+    return null;
+  }
+}
+
+export function millisecondsUntilSessionRefresh(token: string) {
+  const expiresAt = accessTokenExpiresAt(token);
+  if (expiresAt === null) return null;
+  return Math.max(0, expiresAt - Date.now() - 60_000);
+}
 
 function notifySessionChanged() {
   if (typeof window !== "undefined") {
@@ -115,6 +148,7 @@ export const frontSession = {
     try {
       window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
       window.sessionStorage.removeItem(LEGACY_SESSION_KEY);
+      sessionGeneration += 1;
     } catch {
       // A sessao continua valida para a requisicao atual mesmo sem persistencia.
     } finally {
@@ -126,6 +160,7 @@ export const frontSession = {
     try {
       window.sessionStorage.removeItem(SESSION_KEY);
       window.sessionStorage.removeItem(LEGACY_SESSION_KEY);
+      sessionGeneration += 1;
     } catch {
       // O navegador pode bloquear storage em contextos privados ou incorporados.
     } finally {
@@ -149,6 +184,9 @@ async function demoRowsFor(resource: ApiResource): Promise<ResourceRow[]> {
 }
 
 function extractErrorMessage(payload: unknown, status: number) {
+  if (status === 429) {
+    return "Muitas tentativas em pouco tempo. Aguarde um minuto antes de tentar novamente.";
+  }
   if (typeof payload === "string" && payload.trim()) return payload.trim();
   if (typeof payload === "object" && payload !== null) {
     const raw = payload as Record<string, unknown>;
@@ -175,17 +213,119 @@ function redirectToLogin() {
   }
 }
 
+function authenticationSession(
+  payload: unknown,
+  fallback?: FrontSession | { email: string }
+): FrontSession {
+  const raw = asRecord(payload);
+  const user = asRecord(raw.user);
+  const token = responseText(payload, "accessToken", "token");
+  const usuarioId = String(user.id ?? user.usuarioId ?? "");
+
+  if (!token || !usuarioId) {
+    throw new SessionExpiredError(
+      "A API nao devolveu uma sessao valida. Entre novamente."
+    );
+  }
+
+  return {
+    usuarioId,
+    nome: String(
+      user.name ??
+        user.nome ??
+        (fallback && "nome" in fallback ? fallback.nome : "Usuario EMPS")
+    ),
+    email: String(
+      user.email ??
+        (fallback && "email" in fallback ? fallback.email : "")
+    )
+      .trim()
+      .toLowerCase(),
+    role: mapUserRole(user.role),
+    token,
+    modo: "api",
+  };
+}
+
+async function withRefreshLock<T>(operation: () => Promise<T>): Promise<T> {
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    return navigator.locks.request(REFRESH_LOCK_NAME, operation);
+  }
+  return operation();
+}
+
+async function refreshApiSession(force = false): Promise<FrontSession> {
+  const stored = frontSession.get();
+  if (stored && (!force || stored.modo === "front-only")) return stored;
+  if (isDemoMode) {
+    throw new SessionExpiredError("Sua sessao expirou. Entre novamente.");
+  }
+  if (refreshInFlight) return refreshInFlight;
+
+  const generationAtStart = sessionGeneration;
+  refreshInFlight = withRefreshLock(async () => {
+    let response: Response;
+    const timeoutController = new AbortController();
+    const timeout = window.setTimeout(
+      () => timeoutController.abort(),
+      API_TIMEOUT_MS
+    );
+    try {
+      response = await fetch(`${API_URL}/auth/refresh`, {
+        cache: "no-store",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+        method: "POST",
+        signal: timeoutController.signal,
+      });
+    } catch {
+      if (timeoutController.signal.aborted) {
+        throw new Error(
+          "A renovacao da sessao demorou para responder. Tente novamente."
+        );
+      }
+      throw new Error(
+        `Nao foi possivel renovar a sessao pela API EMPS em ${API_URL}.`
+      );
+    } finally {
+      window.clearTimeout(timeout);
+    }
+
+    const payload = await readResponse(response);
+    if (!response.ok) {
+      const error = new Error(extractErrorMessage(payload, response.status));
+      if (response.status === 400 || response.status === 401) {
+        if (generationAtStart === sessionGeneration) redirectToLogin();
+        throw new SessionExpiredError(error.message);
+      }
+      throw error;
+    }
+
+    const nextSession = authenticationSession(payload, frontSession.get() ?? undefined);
+    if (generationAtStart !== sessionGeneration) {
+      const current = frontSession.get();
+      if (current) return current;
+      throw new SessionExpiredError("A sessao foi encerrada.");
+    }
+    frontSession.set(nextSession);
+    return nextSession;
+  }).finally(() => {
+    refreshInFlight = null;
+  });
+
+  return refreshInFlight;
+}
+
 async function request(
   path: string,
   init: RequestInit = {},
-  options: { authenticated?: boolean } = {}
+  options: { authenticated?: boolean; retryAuthentication?: boolean } = {}
 ) {
   const authenticated = options.authenticated ?? true;
-  const session = authenticated ? frontSession.get() : null;
+  let session = authenticated ? frontSession.get() : null;
 
   if (authenticated && (!session || session.modo !== "api" || !session.token)) {
-    redirectToLogin();
-    throw new Error("Sua sessao expirou. Entre novamente.");
+    session = await refreshApiSession();
   }
 
   const headers = new Headers(init.headers);
@@ -205,6 +345,7 @@ async function request(
     response = await fetch(`${API_URL}${path}`, {
       ...init,
       cache: "no-store",
+      credentials: "include",
       headers,
       signal: init.signal ?? timeoutController.signal,
     });
@@ -223,6 +364,17 @@ async function request(
 
   const payload = await readResponse(response);
   if (!response.ok) {
+    if (
+      response.status === 401 &&
+      authenticated &&
+      options.retryAuthentication !== false
+    ) {
+      await refreshApiSession(true);
+      return request(path, init, {
+        authenticated: true,
+        retryAuthentication: false,
+      });
+    }
     if (response.status === 401 && authenticated) redirectToLogin();
     throw new Error(extractErrorMessage(payload, response.status));
   }
@@ -250,51 +402,89 @@ async function demoLogin(email: string, password: string) {
   return session;
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function mapProvisioning(value: unknown): ChargerProvisioning {
+  const raw = asRecord(value);
+  return {
+    ...(raw as unknown as ChargerProvisioning),
+    phaseCount:
+      raw.phaseCount === null || raw.phaseCount === undefined
+        ? null
+        : Number(raw.phaseCount),
+    powerKw: Number(raw.powerKw ?? 0),
+    pricePerKwh: Number(raw.pricePerKwh ?? 0),
+  };
+}
+
+function mapProvisioningList(value: unknown): ChargerProvisioning[] {
+  return Array.isArray(value) ? value.map(mapProvisioning) : [];
+}
+
 export const api = {
   async login(email: string, password: string) {
     frontSession.clear();
+    if (refreshInFlight) await refreshInFlight.catch(() => undefined);
     if (isDemoMode) return demoLogin(email, password);
 
-    const payload = await request(
-      "/auth/login",
-      {
-        method: "POST",
-        body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
-      },
-      { authenticated: false }
+    const payload = await withRefreshLock(() =>
+      request(
+        "/auth/login",
+        {
+          method: "POST",
+          body: JSON.stringify({ email: email.trim().toLowerCase(), password }),
+        },
+        { authenticated: false }
+      )
     );
-    const raw =
-      typeof payload === "object" && payload !== null
-        ? (payload as Record<string, unknown>)
-        : {};
-    const user =
-      typeof raw.user === "object" && raw.user !== null
-        ? (raw.user as Record<string, unknown>)
-        : {};
-    const token = responseText(payload, "accessToken", "token");
-
-    if (!token) throw new Error("A API nao devolveu um token de acesso valido.");
-
-    const session: FrontSession = {
-      usuarioId: String(user.id ?? user.usuarioId ?? ""),
-      nome: String(user.name ?? user.nome ?? "Usuario EMPS"),
-      email: String(user.email ?? email).trim().toLowerCase(),
-      role: mapUserRole(user.role),
-      token,
-      modo: "api",
-    };
-
-    if (!session.usuarioId) {
-      throw new Error("A API nao devolveu a identificacao do usuario.");
-    }
+    const session = authenticationSession(payload, { email });
 
     frontSession.set(session);
     return session;
   },
 
-  logout() {
+  async ensureSession() {
+    const session = frontSession.get();
+    if (session?.modo === "front-only") return session;
+    if (
+      session?.token &&
+      (millisecondsUntilSessionRefresh(session.token) ?? 1) > 0
+    ) {
+      return session;
+    }
+    if (session) return refreshApiSession(true);
+    return refreshApiSession();
+  },
+
+  async refreshSession() {
+    return refreshApiSession(true);
+  },
+
+  async logout() {
+    const pendingRefresh = refreshInFlight;
     frontSession.clear();
-    if (typeof window !== "undefined") window.location.assign("/login");
+    if (pendingRefresh) await pendingRefresh.catch(() => undefined);
+    try {
+      if (!isDemoMode) {
+        await withRefreshLock(() =>
+          fetch(`${API_URL}/auth/logout`, {
+            cache: "no-store",
+            credentials: "include",
+            headers: { Accept: "application/json" },
+            method: "POST",
+          })
+        );
+      }
+    } catch {
+      // O logout local deve funcionar mesmo se a API estiver temporariamente offline.
+    } finally {
+      frontSession.clear();
+      if (typeof window !== "undefined") window.location.assign("/login");
+    }
   },
 
   async dashboard(): Promise<DashboardData> {
@@ -329,6 +519,97 @@ export const api = {
 
     const payload = await request(resourceEndpoints[resource]);
     return mapResourceList(resource, payload) as T[];
+  },
+
+  async provisioningStations(): Promise<ChargerProvisioningStationOption[]> {
+    if (isDemoMode) {
+      return [
+        {
+          _count: { chargers: 1, provisionings: 0 },
+          city: "São Paulo",
+          code: "EMPS-PAULISTA",
+          id: "st_001",
+          name: "EMPS Paulista",
+          state: "SP",
+          status: "ACTIVE",
+        },
+      ];
+    }
+    const payload = await request("/charger-provisionings/stations");
+    return Array.isArray(payload)
+      ? (payload as ChargerProvisioningStationOption[])
+      : [];
+  },
+
+  async listProvisionings(): Promise<ChargerProvisioning[]> {
+    if (isDemoMode) return [];
+    return mapProvisioningList(await request("/charger-provisionings"));
+  },
+
+  async createProvisioning(
+    input: CreateChargerProvisioningRequest
+  ): Promise<ChargerProvisioning & { activationCode: string }> {
+    if (isDemoMode) {
+      throw new Error("O cadastro físico exige a API EMPS conectada.");
+    }
+    const payload = await request("/charger-provisionings", {
+      body: JSON.stringify(input),
+      method: "POST",
+    });
+    const record = asRecord(payload);
+    return {
+      ...mapProvisioning(record),
+      activationCode: String(record.activationCode ?? ""),
+    };
+  },
+
+  async claimProvisioning(input: ClaimChargerProvisioningRequest) {
+    const payload = await request(
+      "/device/v1/charger-provisionings/claim",
+      { body: JSON.stringify(input), method: "POST" },
+      { authenticated: false }
+    );
+    return asRecord(payload);
+  },
+
+  async approveProvisioning(id: string): Promise<ChargerProvisioning> {
+    return mapProvisioning(
+      await request(`/charger-provisionings/${encodeURIComponent(id)}/approve`, {
+        body: JSON.stringify({}),
+        method: "POST",
+      })
+    );
+  },
+
+  async rejectProvisioning(
+    id: string,
+    reason: string
+  ): Promise<ChargerProvisioning> {
+    return mapProvisioning(
+      await request(`/charger-provisionings/${encodeURIComponent(id)}/reject`, {
+        body: JSON.stringify({ reason }),
+        method: "POST",
+      })
+    );
+  },
+
+  async cancelProvisioning(id: string): Promise<ChargerProvisioning> {
+    return mapProvisioning(
+      await request(`/charger-provisionings/${encodeURIComponent(id)}/cancel`, {
+        body: JSON.stringify({}),
+        method: "POST",
+      })
+    );
+  },
+
+  async deleteProvisioning(id: string): Promise<{ deleted: true; id: string }> {
+    if (isDemoMode) {
+      throw new Error("A exclusão exige a API EMPS conectada.");
+    }
+    return (await request(
+      `/charger-provisionings/${encodeURIComponent(id)}`,
+      { method: "DELETE" }
+    )) as { deleted: true; id: string };
   },
 
   async resolveAlert(alertaId: string) {

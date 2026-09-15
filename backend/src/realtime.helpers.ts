@@ -8,7 +8,13 @@ import {
   type RealtimeTopic,
 } from "./realtime.contract";
 
-export const REALTIME_ROLES = ["ADMIN", "OPERATOR", "CUSTOMER"] as const;
+export const REALTIME_ROLES = [
+  "ADMIN",
+  "GOODWE_ADMIN",
+  "OPERATOR",
+  "STATION_OWNER",
+  "CUSTOMER",
+] as const;
 export type RealtimeRole = (typeof REALTIME_ROLES)[number];
 
 export type RealtimeAuthUser = Readonly<{
@@ -118,6 +124,9 @@ export function authenticateRealtimeHandshake(
 export function roomsForRealtimeUser(user: RealtimeAuthUser): string[] {
   if (user.role === "ADMIN" || user.role === "OPERATOR") {
     return [REALTIME_ROOMS.authenticated, REALTIME_ROOMS.operations];
+  }
+  if (user.role === "GOODWE_ADMIN" || user.role === "STATION_OWNER") {
+    return [REALTIME_ROOMS.authenticated];
   }
   return [REALTIME_ROOMS.authenticated, REALTIME_ROOMS.customer(user.sub)];
 }

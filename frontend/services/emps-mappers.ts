@@ -111,7 +111,11 @@ function enumKey(value: unknown) {
 }
 
 export function mapUserRole(value: unknown): UserRole {
-  return enumKey(value) === "ADMIN" ? "admin" : "operador";
+  const role = enumKey(value);
+  if (role === "ADMIN") return "admin";
+  if (role === "GOODWE_ADMIN") return "goodwe";
+  if (role === "STATION_OWNER") return "proprietario";
+  return "operador";
 }
 
 export function mapChargerStatus(value: unknown): ChargerStatus {
@@ -581,6 +585,14 @@ function mapEnergyFlow(rawSummary: JsonRecord, chargers: Charger[]): EnergyFlowT
   const batteryPower = nullableNumber(
     firstDefined(liveStatus.batteryPowerKw, liveStatus.batteryKw)
   );
+  const batterySocPercent = nullableNumber(
+    firstDefined(
+      liveStatus.batterySocPercent,
+      liveStatus.batteryLevelPercent,
+      liveStatus.batterySoc,
+      liveStatus.soc
+    )
+  );
   const sources =
     explicitSources.length > 0
       ? explicitSources
@@ -600,6 +612,7 @@ function mapEnergyFlow(rawSummary: JsonRecord, chargers: Charger[]): EnergyFlowT
   return {
     batteryMode,
     batteryPowerKw: batteryPower,
+    batterySocPercent,
     chargerPowerKw: chargerPower,
     chargerSources: sources,
     gridPowerKw: gridPower ?? (sources.includes("grid") ? chargerPower : null),

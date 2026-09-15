@@ -31,6 +31,10 @@ import type {
   Station,
 } from '@/domain/models';
 import {
+  normalizeChargingSession,
+  normalizeChargingSessions,
+} from '@/domain/normalizers';
+import {
   type AuthResult,
   type AuthTokens,
   createMobileApi,
@@ -137,29 +141,51 @@ function createIdempotencyKey(scope: string, userId?: string) {
   return `${scope}_${userId ?? 'anonymous'}_${Date.now()}_${randomPart}`;
 }
 
+function requireChargingSession(value: unknown): ChargingSession {
+  const session = normalizeChargingSession(value);
+  if (!session) {
+    throw new Error('A API retornou uma sessão de recarga inválida. Atualize e tente novamente.');
+  }
+  return session;
+}
+
 export function getLiveSessionMetrics(
   session: ChargingSession,
   demoPricePerKwh?: number,
   now = Date.now(),
 ): LiveSessionMetrics {
+  const durationSeconds = Number.isFinite(session.durationSeconds)
+    ? Math.max(0, session.durationSeconds)
+    : 0;
+  const energyKwh = Number.isFinite(session.energyKwh) ? Math.max(0, session.energyKwh) : 0;
+  const totalCost = Number.isFinite(session.totalCost) ? Math.max(0, session.totalCost) : 0;
+  const powerKw = Number.isFinite(session.powerKw) ? Math.max(0, session.powerKw) : 0;
+
   if (demoPricePerKwh === undefined) {
     return {
-      durationSeconds: session.durationSeconds,
-      energyKwh: session.energyKwh,
-      totalCost: session.totalCost,
-      powerKw: session.powerKw,
+      durationSeconds,
+      energyKwh,
+      totalCost,
+      powerKw,
     };
   }
 
-  const elapsedRealSeconds = Math.max(0, (now - new Date(session.startedAt).getTime()) / 1000);
-  const durationSeconds = session.simulatedSecondsOffset + elapsedRealSeconds;
-  const energyKwh = session.energyKwh + (session.powerKw * elapsedRealSeconds) / 3600;
+  const startedAt = new Date(session.startedAt).getTime();
+  const elapsedRealSeconds = Number.isFinite(startedAt)
+    ? Math.max(0, (now - startedAt) / 1000)
+    : 0;
+  const simulatedSecondsOffset = Number.isFinite(session.simulatedSecondsOffset)
+    ? Math.max(0, session.simulatedSecondsOffset)
+    : 0;
+  const liveDurationSeconds = simulatedSecondsOffset + elapsedRealSeconds;
+  const liveEnergyKwh = energyKwh + (powerKw * elapsedRealSeconds) / 3600;
+  const safePrice = Number.isFinite(demoPricePerKwh) ? Math.max(0, demoPricePerKwh) : 0;
 
   return {
-    durationSeconds,
-    energyKwh,
-    totalCost: energyKwh * demoPricePerKwh,
-    powerKw: session.powerKw,
+    durationSeconds: liveDurationSeconds,
+    energyKwh: liveEnergyKwh,
+    totalCost: liveEnergyKwh * safePrice,
+    powerKw,
   };
 }
 
@@ -275,10 +301,12 @@ export function AppProvider({ children }: PropsWithChildren) {
     const authenticatedUserId = authenticatedUserIdRef.current;
     const sessionGeneration = ++sessionRefreshGenerationRef.current;
     const historyGeneration = ++historyRefreshGenerationRef.current;
-    const [nextActiveSession, nextHistory] = await Promise.all([
+    const [rawActiveSession, rawHistory] = await Promise.all([
       api.activeSession(),
       api.sessionHistory(),
     ]);
+    const nextActiveSession = normalizeChargingSession(rawActiveSession);
+    const nextHistory = normalizeChargingSessions(rawHistory);
     if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return;
     if (sessionGeneration === sessionRefreshGenerationRef.current) {
       setActiveSession(nextActiveSession);
@@ -305,13 +333,14 @@ export function AppProvider({ children }: PropsWithChildren) {
 
       const stored = Object.fromEntries(entries);
       const cachedUser = parseStoredValue<ConsumerUser | null>(stored[STORAGE.user], null);
-      const cachedSession = parseStoredValue<ChargingSession | null>(
-        stored[STORAGE.activeSession],
-        null,
+      const cachedSession = normalizeChargingSession(
+        parseStoredValue<unknown>(stored[STORAGE.activeSession], null),
       );
-      const cachedHistory = parseStoredValue<ChargingSession[]>(
-        stored[STORAGE.history],
-        EMPS_DEMO_MODE ? initialHistory : [],
+      const cachedHistory = normalizeChargingSessions(
+        parseStoredValue<unknown>(
+          stored[STORAGE.history],
+          EMPS_DEMO_MODE ? initialHistory : [],
+        ),
       );
 
       if (EMPS_DEMO_MODE) {
@@ -337,12 +366,12 @@ export function AppProvider({ children }: PropsWithChildren) {
       authenticationEpochRef.current += 1;
       authenticatedUserIdRef.current = cachedUser.id;
       setUser(cachedUser);
-      setActiveSession(cachedSession);
-      setHistory(cachedHistory);
       try {
         await synchronizeSessions();
       } catch (error) {
         // Caches keep the authenticated app usable during a temporary outage.
+        setActiveSession(cachedSession);
+        setHistory(cachedHistory);
         console.warn('[emps-api] sincronização inicial indisponível', error);
       }
     }
@@ -658,12 +687,14 @@ export function AppProvider({ children }: PropsWithChildren) {
         throw new Error('O provedor de pagamento solicitou uma confirmação adicional.');
       }
 
-      const session = await api.startCharging({
-        idempotencyKey: operation.startKey,
-        paymentIntentId: paymentIntent.id,
-        qrBindingId,
-        spendingLimit,
-      });
+      const session = requireChargingSession(
+        await api.startCharging({
+          idempotencyKey: operation.startKey,
+          paymentIntentId: paymentIntent.id,
+          qrBindingId,
+          spendingLimit,
+        }),
+      );
       pendingStart.current = null;
       sessionRefreshGenerationRef.current += 1;
       setActiveSession(session);
@@ -677,7 +708,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     const authenticationEpoch = authenticationEpochRef.current;
     const authenticatedUserId = authenticatedUserIdRef.current;
     const generation = ++sessionRefreshGenerationRef.current;
-    const nextSession = await api.activeSession();
+    const nextSession = normalizeChargingSession(await api.activeSession());
     if (
       !isAuthenticationCurrent(authenticationEpoch, authenticatedUserId) ||
       generation !== sessionRefreshGenerationRef.current
@@ -694,7 +725,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     const authenticationEpoch = authenticationEpochRef.current;
     const authenticatedUserId = authenticatedUserIdRef.current;
     const generation = ++historyRefreshGenerationRef.current;
-    const nextHistory = await api.sessionHistory();
+    const nextHistory = normalizeChargingSessions(await api.sessionHistory());
     if (
       !isAuthenticationCurrent(authenticationEpoch, authenticatedUserId) ||
       generation !== historyRefreshGenerationRef.current
@@ -970,7 +1001,9 @@ export function AppProvider({ children }: PropsWithChildren) {
     if (!pendingStopKey.current) {
       pendingStopKey.current = createIdempotencyKey('stop', user?.id);
     }
-    const completed = await api.stopCharging(activeSession.id, pendingStopKey.current);
+    const completed = requireChargingSession(
+      await api.stopCharging(activeSession.id, pendingStopKey.current),
+    );
     pendingStopKey.current = null;
     sessionRefreshGenerationRef.current += 1;
     historyRefreshGenerationRef.current += 1;

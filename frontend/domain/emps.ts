@@ -24,7 +24,89 @@ export type ChargerCommand =
   | "executar_checklist"
   | "agendar_teste";
 
-export type UserRole = "admin" | "operador";
+export type UserRole = "admin" | "goodwe" | "operador" | "proprietario";
+
+export type ChargerProvisioningStatus =
+  | "PENDING_CONNECTION"
+  | "PENDING_APPROVAL"
+  | "ENABLED"
+  | "REJECTED"
+  | "CANCELED"
+  | "EXPIRED";
+
+export type ChargerProvisioningStation = {
+  id: string;
+  code: string;
+  name: string;
+  city: string;
+  state: string;
+  status: "PENDING" | "ACTIVE" | "INACTIVE" | "MAINTENANCE";
+};
+
+export type ChargerProvisioningStationOption = ChargerProvisioningStation & {
+  _count: { chargers: number; provisionings: number };
+};
+
+export type ChargerProvisioning = {
+  id: string;
+  stationId: string;
+  status: ChargerProvisioningStatus;
+  name: string;
+  location: string;
+  connectorType: string;
+  powerType: "AC" | "DC";
+  phaseCount: number | null;
+  powerKw: number;
+  pricePerKwh: number;
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  ocppIdentity: string;
+  ocppVersion: "1.6J" | "2.0.1";
+  firmwareVersion: string | null;
+  activationTokenLastFour: string;
+  activationExpiresAt: string;
+  connectionVerifiedAt: string | null;
+  approvedAt: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  station: ChargerProvisioningStation;
+  requestedBy: { id: string; name: string; email: string };
+  reviewedBy: { id: string; name: string; email: string } | null;
+  charger: {
+    id: string;
+    publicCode: string | null;
+    status: string;
+    administrativeStatus: string;
+    qrBindings: Array<{ code: string; publicToken: string; createdAt: string }>;
+  } | null;
+};
+
+export type CreateChargerProvisioningRequest = {
+  stationId: string;
+  name: string;
+  location: string;
+  connectorType: string;
+  powerType: "AC" | "DC";
+  phaseCount?: 1 | 3;
+  powerKw: number;
+  pricePerKwh: number;
+  manufacturer: string;
+  model: string;
+  serialNumber: string;
+  ocppIdentity: string;
+  ocppVersion: "1.6J" | "2.0.1";
+};
+
+export type ClaimChargerProvisioningRequest = {
+  activationCode: string;
+  serialNumber: string;
+  ocppIdentity: string;
+  firmwareVersion?: string;
+};
 
 export type Client = {
   usuarioId: string;
@@ -178,6 +260,7 @@ export type ChargerEnergySource = "grid" | "solar" | "battery";
 export type EnergyFlowTelemetry = {
   batteryMode: "charging" | "discharging" | "idle" | "unknown";
   batteryPowerKw: number | null;
+  batterySocPercent: number | null;
   chargerPowerKw: number | null;
   chargerSources: ChargerEnergySource[];
   gridPowerKw: number | null;

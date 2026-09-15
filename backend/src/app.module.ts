@@ -6,6 +6,11 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { AuthController, JwtGuard, RolesGuard } from "./auth";
 import { AdminOperationsService } from "./admin-operations.service";
 import { ChargingGatewayService } from "./charging-gateway.service";
+import {
+  ChargerProvisioningController,
+  ChargerProvisioningDeviceController,
+} from "./charger-provisioning.controller";
+import { ChargerProvisioningService } from "./charger-provisioning.service";
 import { DashboardController } from "./dashboard.controller";
 import {
   MobileAuthController,
@@ -18,6 +23,7 @@ import { PaymentGatewayService } from "./payment-gateway.service";
 import { PrismaService } from "./prisma.service";
 import { RealtimeModule } from "./realtime.module";
 import { UsersController } from "./users.controller";
+import { WebAuthService } from "./web-auth.service";
 
 function jwtSecret() {
   const secret = process.env.JWT_SECRET;
@@ -54,6 +60,8 @@ function jwtSecret() {
     PaymentWebhookController,
     UsersController,
     OperationsController,
+    ChargerProvisioningController,
+    ChargerProvisioningDeviceController,
     DashboardController,
   ],
   providers: [
@@ -62,6 +70,8 @@ function jwtSecret() {
     MobileService,
     PaymentGatewayService,
     ChargingGatewayService,
+    ChargerProvisioningService,
+    WebAuthService,
     JwtGuard,
     RolesGuard,
     { provide: APP_GUARD, useClass: ThrottlerGuard },

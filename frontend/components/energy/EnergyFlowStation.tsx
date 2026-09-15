@@ -1,4 +1,7 @@
+"use client";
+
 import Image from "next/image";
+import { useState } from "react";
 import {
   BatteryCharging,
   SunMedium,
@@ -6,33 +9,64 @@ import {
   Zap,
 } from "lucide-react";
 import type { Charger, EnergyFlowTelemetry } from "@/domain/emps";
+import { batteryLevel, getEnergyFlowState, simulateEnergyFlow, type EnergySimulationSettings } from "@/domain/energy-flow";
+import { BatteryLevelOverlay, type BatteryVisualState } from "./BatteryLevelOverlay";
+import { EnergySimulationControls } from "./EnergySimulationControls";
 
+// Routes follow the wires, roof fascia and floor perspective of the 1600 x 900 image.
 const routes = {
-  grid: "M 0 181 H 220 V 576",
-  solar: "M 1515 492 H 1350 V 680 H 1260 V 742",
-  battery: "M 1260 742 V 820 H 220 V 576",
-  chargerBus: "M 220 576 H 540 V 650 H 835 V 590",
-  chargerAlpha: "M 835 590 H 720 V 548",
-  chargerBeta: "M 835 590 H 952 V 549",
+  grid:
+    "M 74 141 C 144 134 199 116 239 96 M 360 98 C 426 132 522 151 623 154 L 659 144 L 1268 216 V 284 L 1510 321 V 345 L 1430 367 V 422 L 1404 429",
+  solar: "M 960 315 L 982 320 V 391 L 1306 439 L 1346 429",
+  battery: "M 1377 479 V 515",
+  chargerBus: "M 1352 479 L 1323 490 V 673 L 1055 786 L 891 753",
+  chargerAlpha: "M 891 753 L 552 685 V 627",
+  chargerBeta: "M 891 753 V 692",
+};
+
+const outletFlows = {
+  left: `${routes.chargerBus} L 552 685 V 627`,
+  right: `${routes.chargerBus} V 692`,
 };
 
 function EnergyRoute({
   active,
   className,
   path,
+  flowPath,
+  flowLane,
+  reverse = false,
+  showTrack = true,
+  showFlow = true,
+  routeId,
+  tone,
 }: {
   active: boolean;
   className: string;
   path: string;
+  flowPath?: string;
+  flowLane?: "in" | "out";
+  reverse?: boolean;
+  showTrack?: boolean;
+  showFlow?: boolean;
+  routeId: string;
+  tone?: string;
 }) {
   return (
     <g
-      className={`energy-route energy-route--${className} energy-route--${
+      data-energy-route={routeId}
+      className={`energy-route energy-route--${className}${
+        tone ? ` energy-route--${tone}` : ""
+      }${reverse ? " energy-route--reverse" : ""} energy-route--${
         active ? "active" : "inactive"
       }`}
     >
-      <path className="energy-route__track" d={path} />
-      <path className="energy-route__flow" d={path} />
+      {showTrack && <path className="energy-route__track" d={path} />}
+      {showFlow && <path
+        className={`energy-route__flow${flowPath ? " energy-route__flow--outlet" : ""}${flowLane ? ` energy-route__flow--battery-${flowLane}` : ""}`}
+        d={flowPath ?? path}
+        pathLength={flowPath ? undefined : 100}
+      />}
     </g>
   );
 }
@@ -49,21 +83,25 @@ function formatPower(value: number | null) {
 export function EnergyFlowStation({
   chargers,
   telemetry,
+  simulation = false,
 }: {
   chargers: Charger[];
   telemetry: EnergyFlowTelemetry;
+  simulation?: boolean;
 }) {
-  const activeChargerCount = chargers.filter(
-    (charger) => charger.status === "em_uso"
-  ).length;
-  const hasActiveCharging =
-    activeChargerCount > 0 || (telemetry.chargerPowerKw ?? 0) > 0;
-  const gridActive = telemetry.chargerSources.includes("grid");
-  const solarActive =
-    telemetry.solarChargingBattery || telemetry.chargerSources.includes("solar");
-  const batteryActive =
-    telemetry.chargerSources.includes("battery") ||
-    telemetry.chargerSources.includes("solar");
+  const [settings, setSettings] = useState<EnergySimulationSettings>(() => ({
+    period: "day",
+    batterySocPercent: batteryLevel(telemetry.batterySocPercent) ?? 68,
+    solarPowerKw: 12,
+  }));
+  const displayedTelemetry = simulation ? simulateEnergyFlow(chargers, settings) : telemetry;
+  const flow = getEnergyFlowState(chargers, displayedTelemetry);
+  const batterySoc = flow.batterySoc;
+  const duplexBattery = flow.solarChargesBattery && flow.batterySuppliesCars;
+  const batteryState: BatteryVisualState =
+    batterySoc !== null && batterySoc <= 15 && flow.batteryMode !== "charging"
+      ? "critical"
+      : flow.batteryMode;
 
   return (
     <section className="energy-flow" aria-labelledby="energy-flow-title">
@@ -77,10 +115,13 @@ export function EnergyFlowStation({
             <h3 id="energy-flow-title">Fluxo de energia do eletroposto</h3>
           </div>
         </div>
-        <span aria-live="polite" className="energy-flow__activity">
-          <i aria-hidden="true" />
-          Fluxo monitorado
-        </span>
+        <div className="energy-flow__header-actions">
+          <span aria-live="polite" className="energy-flow__activity">
+            <i aria-hidden="true" />
+            Fluxo monitorado
+          </span>
+          {simulation && <EnergySimulationControls settings={settings} onChange={setSettings} />}
+        </div>
       </header>
 
       <div className="energy-flow__scene">
@@ -90,7 +131,7 @@ export function EnergyFlowStation({
           fill
           loading="eager"
           sizes="(max-width: 820px) 100vw, calc(100vw - 110px)"
-          src="/emps-energy-station.png"
+          src="/emps-energy-station-v2.jpg"
         />
         <div className="energy-flow__contrast" aria-hidden="true" />
 
@@ -98,86 +139,101 @@ export function EnergyFlowStation({
           aria-hidden="true"
           className="energy-flow__routes"
           preserveAspectRatio="xMidYMid meet"
-          viewBox="0 0 1664 941"
+          viewBox="0 0 1600 900"
         >
-          <EnergyRoute active={gridActive} className="grid" path={routes.grid} />
-          <EnergyRoute active={solarActive} className="solar" path={routes.solar} />
+          <EnergyRoute active={flow.gridSuppliesCars} className="grid" path={routes.grid} routeId="grid" />
+          <EnergyRoute active={flow.solarChargesBattery} className="solar" path={routes.solar} routeId="solar" />
           <EnergyRoute
-            active={batteryActive}
+            active={flow.solarChargesBattery}
             className="battery"
             path={routes.battery}
+            flowLane={duplexBattery ? "in" : undefined}
+            tone="battery-charging"
+            routeId="battery-charge"
           />
           <EnergyRoute
-            active={hasActiveCharging}
+            active={flow.batterySuppliesCars}
+            className="battery"
+            path={routes.battery}
+            flowLane={duplexBattery ? "out" : undefined}
+            reverse
+            showTrack={false}
+            tone="battery-discharging"
+            routeId="battery-discharge"
+          />
+          <EnergyRoute
+            active={flow.supplyingCars}
             className="charger"
             path={routes.chargerBus}
+            showFlow={false}
+            routeId="charger-bus"
           />
           <EnergyRoute
-            active={hasActiveCharging}
+            active={flow.leftActive}
             className="charger"
             path={routes.chargerAlpha}
+            flowPath={outletFlows.left}
+            routeId="charger-left"
           />
           <EnergyRoute
-            active={hasActiveCharging}
+            active={flow.rightActive}
             className="charger"
             path={routes.chargerBeta}
+            flowPath={outletFlows.right}
+            routeId="charger-right"
           />
 
           <rect
             className={`energy-terminal energy-terminal--charger${
-              hasActiveCharging ? " energy-terminal--active" : ""
+              flow.leftActive ? " energy-terminal--active" : ""
             }`}
-            height="16"
-            width="16"
-            x="712"
-            y="540"
+            height="4"
+            width="10"
+            x="547"
+            y="625"
           />
           <rect
             className={`energy-terminal energy-terminal--charger${
-              hasActiveCharging ? " energy-terminal--active" : ""
+              flow.rightActive ? " energy-terminal--active" : ""
             }`}
-            height="16"
-            width="16"
-            x="944"
-            y="541"
+            height="4"
+            width="10"
+            x="886"
+            y="690"
           />
         </svg>
 
-        <Image
-          alt="Inversor solar GoodWe"
-          className="energy-inverter"
-          draggable={false}
-          height={920}
-          src="/sems-inverter-dark.png"
-          width={1240}
-        />
+        <BatteryLevelOverlay percent={batterySoc} state={batteryState} />
 
         <div
           className={`energy-source energy-source--grid energy-source--${
-            gridActive ? "active" : "inactive"
+            flow.gridSuppliesCars ? "active" : "inactive"
           }`}
         >
           <UtilityPole size={15} aria-hidden="true" />
           <span>Rede</span>
-          <small>{formatPower(telemetry.gridPowerKw)}</small>
+          <small>{formatPower(displayedTelemetry.gridPowerKw)}</small>
         </div>
         <div
           className={`energy-source energy-source--solar energy-source--${
-            solarActive ? "active" : "inactive"
+            flow.solarChargesBattery ? "active" : "inactive"
           }`}
         >
           <SunMedium size={15} aria-hidden="true" />
           <span>Solar</span>
-          <small>{formatPower(telemetry.solarPowerKw)}</small>
+          <small>{formatPower(displayedTelemetry.solarPowerKw)}</small>
         </div>
         <div
-          className={`energy-source energy-source--battery energy-source--${
-            batteryActive || solarActive ? "active" : "inactive"
+          className={`energy-source energy-source--battery energy-source--battery-${batteryState} energy-source--${
+            flow.batterySuppliesCars || flow.solarChargesBattery ? "active" : "inactive"
           }`}
         >
           <BatteryCharging size={15} aria-hidden="true" />
           <span>Bateria</span>
-          <small>{formatPower(telemetry.batteryPowerKw)}</small>
+          <small>
+            {batterySoc === null ? "" : `${Math.round(batterySoc)}% · `}
+            {formatPower(displayedTelemetry.batteryPowerKw)}
+          </small>
         </div>
       </div>
     </section>

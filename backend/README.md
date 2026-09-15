@@ -4,9 +4,10 @@ API central da plataforma EMPS. Foi construída com NestJS, Prisma e PostgreSQL 
 
 ## Responsabilidades
 
-- autenticação JWT para administradores, operadores e motoristas;
-- refresh token rotativo para o aplicativo;
+- autenticação JWT para GoodWe/SEMS+, operadores EMPS, proprietários e motoristas;
+- refresh token rotativo para o painel e o aplicativo;
 - cadastro e consulta de eletropostos, carregadores e status ao vivo;
+- provisionamento controlado de bombas físicas, com código temporário e homologação;
 - resolução autoritativa do QR de cada carregador;
 - intenção, confirmação e conciliação de pagamento;
 - início, acompanhamento e encerramento idempotente de sessões;
@@ -56,6 +57,8 @@ Invoke-RestMethod http://localhost:3001/auth/health
 | `JWT_SECRET` | Segredo de assinatura; use pelo menos 32 caracteres aleatórios e nunca publique o valor |
 | `JWT_EXPIRES_IN` | Vida do access token, por exemplo `15m` |
 | `REFRESH_TOKEN_DAYS` | Vida máxima do refresh token móvel |
+| `WEB_REFRESH_TOKEN_DAYS` | Janela deslizante da sessão persistente do painel, padrão de 365 dias |
+| `CHARGER_ACTIVATION_DAYS` | Validade do código temporário entregue ao instalador (1 a 30 dias) |
 | `PORT` | Porta HTTP da API, padrão `3001` |
 | `CORS_ORIGINS` | Origens web permitidas, separadas por vírgula |
 | `PAYMENT_PROVIDER` | `sandbox` ou `stripe` |
@@ -78,16 +81,15 @@ O seed é repetível e cria:
 
 | Perfil | E-mail | Senha |
 | --- | --- | --- |
-| Administrador | `admin@emps.com` | `admin123` |
+| Dono do eletroposto / painel existente | `admin@emps.com` | `admin123` |
+| Administrador GoodWe / aprovações | `goodwe@emps.com` | `goodwe123` |
+| Operador EMPS | `operador@emps.com` | `operador123` |
 | Motorista | `motorista@emps.com` | `emps123` |
 
-Também cria o eletroposto `EMPS Paulista`, o carregador `chg_001` e o vínculo de QR:
-
-```text
-Token público: paulista-a01-demo
-Código curto:  EMPS-PAULISTA-A01
-URL:           https://app.emps.com.br/c/paulista-a01-demo
-```
+Também cria somente o eletroposto `EMPS Paulista`. O seed remove carregadores,
+sessões, pagamentos, alertas e clientes operacionais fictícios. Um carregador e
+seu QR Code passam a existir apenas depois do fluxo real de solicitação, conexão
+física e homologação EMPS.
 
 Essas credenciais são somente para desenvolvimento. Troque-as ou remova-as antes de publicar.
 
@@ -97,6 +99,8 @@ Essas credenciais são somente para desenvolvimento. Troque-as ou remova-as ante
 
 ```text
 POST /auth/login
+POST /auth/refresh
+POST /auth/logout
 GET  /auth/me
 GET  /auth/health
 GET  /dashboard/summary
@@ -105,9 +109,22 @@ GET  /chargers
 GET  /charging-sessions
 GET  /payments
 GET  /alerts
+
+GET  /charger-provisionings
+POST /charger-provisionings
+POST /charger-provisionings/:id/approve
+POST /charger-provisionings/:id/reject
+POST /charger-provisionings/:id/cancel
+POST /device/v1/charger-provisionings/claim
 ```
 
 As rotas operacionais protegidas permitem enviar comandos ao carregador, fazer liberação manual, iniciar e receber sessões pós-pagas, finalizar sessões, aprovar pagamentos e resolver alertas.
+
+O painel guarda somente o access token curto na aba. O refresh token permanece em
+cookie `HttpOnly`, não é exposto ao JavaScript e é trocado a cada renovação. Ao
+reabrir o navegador, o painel restaura a conta automaticamente; enquanto houver
+uso dentro da janela configurada, a validade é renovada de forma deslizante. O
+botão **Sair** revoga o token persistente mesmo que o access token já tenha vencido.
 
 ### Aplicativo
 
@@ -152,7 +169,13 @@ O servidor envia `emps:change` com um contrato mínimo, sem nomes, e-mails ou da
 
 Os tópicos são `session.created`, `session.updated`, `payment.updated`, `charger.updated`, `station.updated`, `alert.updated`, `customer.updated` e `dashboard.updated`. O evento é apenas um sinal para o cliente refazer a consulta REST; ele não replica registros do banco.
 
-Todo usuário autenticado entra em `authenticated`. Administradores e operadores também entram em `operations`; motoristas entram somente em sua sala `customer:<sub>`. Mudanças específicas de um motorista são entregues apenas à sala dele e à operação. O servidor só confirma a inscrição nas salas com `emps:ready`; até esse evento, o cliente mantém a reconciliação REST ativa.
+Todo usuário autenticado entra em `authenticated`. O dono administrador e os
+operadores EMPS entram em `operations`; a conta GoodWe de aprovação e os perfis
+restritos de proprietário não recebem eventos globais de clientes, sessões ou
+pagamentos. Motoristas entram somente em sua sala
+`customer:<sub>`. Mudanças específicas de um motorista são entregues apenas à sala
+dele e à operação. O servidor só confirma a inscrição nas salas com `emps:ready`;
+até esse evento, o cliente mantém a reconciliação REST ativa.
 
 O emissor atual atende uma única instância da API. Antes de executar mais de uma réplica, configure um adaptador Socket.IO compartilhado (por exemplo, Redis) e uma entrega durável/outbox para os eventos. O polling de segurança dos clientes continua reconciliando o estado, mas não substitui essa configuração de escala.
 

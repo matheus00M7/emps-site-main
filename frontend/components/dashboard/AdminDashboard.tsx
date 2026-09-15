@@ -23,19 +23,21 @@ import {
 } from "recharts";
 import { AppShell } from "@/components/shell/AppShell";
 import { ChargerVisualBoard } from "@/components/chargers/ChargerVisualBoard";
+import { EnergyFlowStation } from "@/components/energy/EnergyFlowStation";
 import { StatusBadge } from "@/components/status/StatusBadge";
 import {
   getDashboardMetrics,
   type DashboardMetric,
 } from "@/components/dashboard/dashboard-metrics";
-import { DashboardData } from "@/domain/emps";
+import type { Charger, DashboardData } from "@/domain/emps";
+import type { SetStateAction } from "react";
 import {
   formatCurrency,
   formatDateTime,
   formatKwh,
   formatMinutes,
 } from "@/utils/formatters";
-import { api } from "@/services/emps-api";
+import { api, isDemoMode } from "@/services/emps-api";
 import { useRealtime } from "@/components/realtime/RealtimeProvider";
 
 function Metric({
@@ -206,6 +208,14 @@ export function AdminDashboard() {
     return getDashboardMetrics(data);
   }, [data]);
 
+  const updateChargers = useCallback((update: SetStateAction<Charger[]>) => {
+    setData((current) => {
+      if (!current) return current;
+      const carregadores = typeof update === "function" ? update(current.carregadores) : update;
+      return { ...current, carregadores };
+    });
+  }, []);
+
   return (
     <AppShell
       eyebrow="EMPS / Operacao"
@@ -225,18 +235,33 @@ export function AdminDashboard() {
         </div>
       ) : (
         <>
-          <section className="panel dashboard-chargers-panel">
-            <SectionHeading
-              eyebrow="Infraestrutura"
-              icon={BatteryCharging}
-              title="Status dos carregadores"
-              tone="infra"
-            />
-            <ChargerVisualBoard chargers={data.carregadores} />
-          </section>
+          <div className="dashboard-overview">
+            <div className="dashboard-energy-flow">
+              <EnergyFlowStation
+                chargers={data.carregadores}
+                simulation={isDemoMode}
+                telemetry={data.energyFlow}
+              />
+            </div>
+            <div className="dashboard-chargers-slot">
+              <section className="panel dashboard-chargers-panel">
+                <SectionHeading
+                  eyebrow="Infraestrutura"
+                  icon={BatteryCharging}
+                  title="Status dos carregadores"
+                  tone="infra"
+                />
+                <ChargerVisualBoard
+                  chargers={data.carregadores}
+                  onChargersChange={updateChargers}
+                  scrollAfter={6}
+                />
+              </section>
+            </div>
+          </div>
 
           <div className="dashboard-grid dashboard-grid--wide">
-            <section className="panel table-panel">
+            <section className="panel table-panel dashboard-monitoring-panel">
               <SectionHeading
                 eyebrow="Monitoramento"
                 icon={Activity}
@@ -257,7 +282,7 @@ export function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {data.sessoes.slice(0, 5).map((session) => (
+                    {data.sessoes.map((session) => (
                       <tr key={session.sessaoId}>
                         <td>{session.sessaoId}</td>
                         <td>{session.usuarioNome}</td>
@@ -275,25 +300,27 @@ export function AdminDashboard() {
               </div>
             </section>
 
-            <section className="panel side-stack">
+            <section className="panel side-stack dashboard-alerts-panel">
               <SectionHeading
                 eyebrow="Atencao"
                 icon={AlertTriangle}
                 title="Alertas abertos"
                 tone="alert"
               />
-              {data.alertas.slice(0, 4).map((alert) => (
-                <article className="alert-row" key={alert.alertaId}>
-                  <AlertTriangle size={17} aria-hidden="true" />
-                  <div>
-                    <strong>{alert.titulo}</strong>
-                    <small>
-                      {alert.carregadorNome ?? alert.origem} · {formatDateTime(alert.dataCriacao)}
-                    </small>
-                  </div>
-                  <StatusBadge status={alert.severidade} />
-                </article>
-              ))}
+              <div className="dashboard-alert-list">
+                {data.alertas.map((alert) => (
+                  <article className="alert-row" key={alert.alertaId}>
+                    <AlertTriangle size={17} aria-hidden="true" />
+                    <div>
+                      <strong>{alert.titulo}</strong>
+                      <small>
+                        {alert.carregadorNome ?? alert.origem} · {formatDateTime(alert.dataCriacao)}
+                      </small>
+                    </div>
+                    <StatusBadge status={alert.severidade} />
+                  </article>
+                ))}
+              </div>
             </section>
           </div>
 

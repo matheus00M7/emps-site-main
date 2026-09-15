@@ -82,11 +82,9 @@ type RequestOptions = RequestInit & {
   retryAuthentication?: boolean;
 };
 
-type ApiPayload<T> = {
-  data?: T;
-  message?: string;
-  code?: string;
-};
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
 
 function apiMessage(error: unknown) {
   if (error instanceof ApiRequestError) return error;
@@ -138,16 +136,42 @@ export function createMobileApi({
         signal: controller.signal,
       });
 
-      const payload = (await response.json().catch(() => ({}))) as ApiPayload<T>;
+      const rawBody = await response.text();
+      let payload: unknown = null;
+      if (rawBody.trim().length > 0) {
+        try {
+          payload = JSON.parse(rawBody) as unknown;
+        } catch {
+          throw new ApiRequestError(
+            'A API EMPS retornou uma resposta inválida.',
+            response.status,
+            'INVALID_RESPONSE',
+          );
+        }
+      }
+
       if (!response.ok) {
+        const message =
+          isRecord(payload) && typeof payload.message === 'string'
+            ? payload.message
+            : 'Não foi possível concluir a solicitação.';
+        const code =
+          isRecord(payload) && typeof payload.code === 'string'
+            ? payload.code
+            : undefined;
         throw new ApiRequestError(
-          payload.message ?? 'Não foi possível concluir a solicitação.',
+          message,
           response.status,
-          payload.code,
+          code,
         );
       }
 
-      return (payload.data ?? payload) as T;
+      if (response.status === 204) return undefined as T;
+      if (rawBody.trim().length === 0) return null as T;
+      if (isRecord(payload) && Object.prototype.hasOwnProperty.call(payload, 'data')) {
+        return payload.data as T;
+      }
+      return payload as T;
     } catch (error) {
       throw apiMessage(error);
     } finally {

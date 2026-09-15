@@ -117,7 +117,7 @@ test("canal Socket.IO autentica JWT e isola eventos entre clientes", async () =>
     const [operations, customerOne, customerTwo] = await Promise.all([
       connectRealtime(
         realtimeUrl,
-        await jwt.signAsync({ sub: "admin-1", role: "ADMIN" }),
+        await jwt.signAsync({ sub: "operator-1", role: "OPERATOR" }),
       ),
       connectRealtime(
         realtimeUrl,

@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { Dispatch, FormEvent, SetStateAction } from "react";
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import type { LucideIcon } from "lucide-react";
@@ -175,7 +175,10 @@ function ChargerScene({ charger }: { charger: Charger }) {
   const visual = chargerVisualStates[charger.status];
 
   return (
-    <div className="charger-scene" aria-hidden="true">
+    <div
+      className={`charger-scene charger-scene--${visual.tone}`}
+      aria-hidden="true"
+    >
       <div className="status-orbit">
         <span className="status-light status-light--free" />
         <span className="status-light status-light--busy" />
@@ -188,6 +191,7 @@ function ChargerScene({ charger }: { charger: Charger }) {
         draggable={false}
         height={visual.asset.height}
         loading="eager"
+        sizes="(max-width: 620px) 45vw, 240px"
         src={visual.asset.src}
         width={visual.asset.width}
       />
@@ -198,11 +202,17 @@ function ChargerScene({ charger }: { charger: Charger }) {
 export function ChargerVisualBoard({
   chargers,
   compact = false,
+  onChargersChange,
+  scrollAfter,
 }: {
   chargers: Charger[];
   compact?: boolean;
+  onChargersChange?: Dispatch<SetStateAction<Charger[]>>;
+  scrollAfter?: number;
 }) {
-  const [visibleChargers, setVisibleChargers] = useState<Charger[]>(chargers);
+  const [localChargers, setLocalChargers] = useState<Charger[]>(chargers);
+  const visibleChargers = onChargersChange ? chargers : localChargers;
+  const setVisibleChargers = onChargersChange ?? setLocalChargers;
   const [manualReleaseDraft, setManualReleaseDraft] =
     useState<ManualReleaseDraft | null>(null);
   const [postpaidSettlementDraft, setPostpaidSettlementDraft] =
@@ -219,10 +229,12 @@ export function ChargerVisualBoard({
     string | null
   >(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
+  const hasInternalScroll =
+    typeof scrollAfter === "number" && visibleChargers.length > scrollAfter;
 
   useEffect(() => {
-    setVisibleChargers(chargers);
-  }, [chargers]);
+    if (!onChargersChange) setLocalChargers(chargers);
+  }, [chargers, onChargersChange]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 15_000);
@@ -581,9 +593,20 @@ export function ChargerVisualBoard({
     <div
       className={`charger-visual-board${
         compact ? " charger-visual-board--compact" : ""
+      }${
+        hasInternalScroll ? " charger-visual-board--scrollable" : ""
       }`}
     >
-      <div className="charger-map">
+      <div
+        aria-label={
+          hasInternalScroll
+            ? `Lista com ${visibleChargers.length} carregadores. Role para ver todos.`
+            : undefined
+        }
+        className="charger-map"
+        role={hasInternalScroll ? "region" : undefined}
+        tabIndex={hasInternalScroll ? 0 : undefined}
+      >
         {visibleChargers.map((charger) => {
           const visual = chargerVisualStates[charger.status];
           const postpaidSession = postpaidSessions[charger.carregadorId] ?? null;
@@ -781,7 +804,6 @@ export function ChargerVisualBoard({
                       },
                       detailAction,
                     ];
-
           return (
             <article
               className={`charger-bay charger-bay--${visual.tone}${

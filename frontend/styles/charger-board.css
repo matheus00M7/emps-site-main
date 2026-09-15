@@ -2,6 +2,7 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  min-height: 0;
 }
 
 .charger-visual-board--compact {
@@ -11,7 +12,7 @@
 .charger-map {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(2, minmax(260px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   position: relative;
   z-index: 2;
 }
@@ -63,9 +64,12 @@
   border: 1px solid color-mix(in srgb, var(--bay-color) 40%, #383a3e);
   border-radius: 8px;
   box-shadow: 0 10px 24px #0000002e, inset 0 1px #ffffff08;
-  min-height: 194px;
+  display: flex;
+  flex-direction: column;
+  min-height: 214px;
+  min-width: 0;
   overflow: visible;
-  padding: 9px;
+  padding: 12px;
   position: relative;
   transition:
     border-color 0.18s ease,
@@ -117,6 +121,11 @@
   justify-content: space-between;
 }
 
+.charger-bay__top > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .charger-bay__top strong,
 .charger-bay__sync {
   display: block;
@@ -166,17 +175,20 @@
   background: radial-gradient(circle at 58% 52%, var(--bay-soft), transparent 60%);
   border: 0;
   border-radius: 8px;
-  height: 94px;
+  height: 106px;
+  min-width: 0;
   overflow: hidden;
   position: relative;
 }
 
 .status-orbit {
   display: flex;
-  gap: 5px;
+  gap: 4px;
+  left: 50%;
   position: absolute;
-  right: 5px;
-  top: 5px;
+  right: auto;
+  top: 2px;
+  transform: translateX(-50%);
   z-index: 4;
 }
 
@@ -184,9 +196,9 @@
   background: var(--muted);
   border-radius: 50%;
   box-shadow: 0 0 0 3px #ffffff08;
-  height: 7px;
+  height: 6px;
   opacity: 0.42;
-  width: 7px;
+  width: 6px;
 }
 
 .status-light--free {
@@ -263,39 +275,38 @@
 }
 
 .charging-vehicle-asset {
-  height: calc(100% - 8px);
-  inset: 4px;
+  height: calc(100% - 15px);
+  inset: 14px 0 1px;
   object-fit: contain;
   object-position: center;
   pointer-events: none;
   position: absolute;
   user-select: none;
-  width: calc(100% - 14px);
+  width: 100%;
 }
 
 .charging-pile-asset {
-  bottom: 2px;
   filter: drop-shadow(0 0 18px var(--bay-soft));
-  height: calc(100% - 8px);
-  left: 50%;
-  max-width: calc(100% - 20px);
+  height: calc(100% - 17px);
+  inset: 15px 0 2px;
   object-fit: contain;
+  object-position: center;
   pointer-events: none;
   position: absolute;
-  transform: translateX(-50%);
   user-select: none;
+  width: 100%;
 }
 
 .charging-pile-warning-asset,
 .charging-pile-danger-asset {
-  height: calc(100% - 4px);
-  inset: 2px;
+  height: calc(100% - 16px);
+  inset: 14px 0 2px;
   object-fit: contain;
   object-position: center;
   pointer-events: none;
   position: absolute;
   user-select: none;
-  width: calc(100% - 10px);
+  width: 100%;
 }
 
 .charger-bay__metrics {
@@ -309,7 +320,7 @@
   align-items: center;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(0, 1fr) minmax(76px, 0.72fr);
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   margin-top: 9px;
 }
 
@@ -323,7 +334,7 @@
   font-size: 0.65rem;
   font-weight: 800;
   gap: 5px;
-  min-height: 35px;
+  min-height: 40px;
   min-width: 0;
   padding: 5px 6px;
   position: relative;
@@ -353,9 +364,9 @@
 
 .charger-metric strong {
   color: #f3f6f8;
-  font-size: 0.66rem;
+  font-size: 0.7rem;
   line-height: 1.1;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .charger-metric small {
@@ -374,7 +385,8 @@
   font-weight: 800;
   gap: 8px;
   justify-content: space-between;
-  margin-top: 8px;
+  margin-top: auto;
+  padding-top: 8px;
   min-height: 18px;
 }
 
@@ -394,7 +406,7 @@
 .charger-card-actions {
   display: grid;
   gap: 5px;
-  grid-template-columns: repeat(auto-fit, minmax(86px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-top: 8px;
 }
 
@@ -405,22 +417,21 @@
   border-radius: 6px;
   color: #d9e0e7;
   display: inline-flex;
-  font-size: 0.64rem;
+  font-size: clamp(0.56rem, 0.62vw, 0.64rem);
   font-weight: 900;
   gap: 5px;
   justify-content: center;
-  min-height: 27px;
+  min-height: 32px;
   min-width: 0;
-  overflow: hidden;
-  padding: 0 6px;
+  padding: 4px;
   position: relative;
-  text-overflow: ellipsis;
   transition:
     background 0.16s ease,
     border-color 0.16s ease,
     box-shadow 0.16s ease,
     color 0.16s ease,
     transform 0.16s ease;
+  text-align: center;
   white-space: nowrap;
 }
 

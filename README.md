@@ -27,6 +27,17 @@ App Expo ──► MapLibre ──► tiles do OpenStreetMap
 
 O app consulta eletropostos, resolve o QR no servidor, cria uma intenção de pagamento e solicita o início ou encerramento da sessão. Ele não envia comandos diretamente ao carregador. A API mantém a autorização, a idempotência e o estado da sessão.
 
+## Cadastro seguro de novas bombas
+
+O menu **Cadastro de carregadores** do website usa um fluxo de quatro etapas, sem limite fixo de bombas por eletroposto:
+
+1. o administrador do eletroposto solicita o cadastro e recebe um código temporário de ativação;
+2. o instalador informa esse código, o número de série e a identidade OCPP da bomba física;
+3. um operador EMPS confere a solicitação e homologa ou rejeita o equipamento;
+4. somente na homologação a API cria, em uma única transação, o carregador operacional, o estado ao vivo e o QR Code oficial.
+
+Solicitações pendentes, rejeitadas, canceladas ou expiradas não aparecem no aplicativo do motorista. O código temporário possui 64 bits aleatórios, expira por padrão em sete dias e é salvo no banco somente como hash. Número de série e identidade OCPP não podem ficar ativos em dois cadastros simultâneos.
+
 Depois de uma alteração, a API envia pelo Socket.IO apenas o tipo e o ID do que mudou. O painel e o aplicativo refazem as consultas REST e recebem o estado oficial do PostgreSQL. Em uma queda do WebSocket, ambos reconectam; o painel ativa sincronização periódica e a tela de recarga mantém polling REST de cinco segundos.
 
 ## Início rápido no Windows PowerShell
@@ -64,6 +75,11 @@ npm run dev
 
 Abra `http://localhost:3000/login`.
 
+Depois do primeiro login, o painel restaura a conta automaticamente ao reabrir o
+navegador e renova a autorização curta em segundo plano. A credencial persistente
+fica protegida em cookie `HttpOnly`; somente **Sair**, revogação administrativa ou
+inatividade além da janela configurada encerram a sessão.
+
 Em um terceiro PowerShell, inicie o aplicativo:
 
 ```powershell
@@ -84,21 +100,21 @@ Descubra o IPv4 com `ipconfig`. O computador e o celular precisam estar na mesma
 
 > Em celular físico, nunca use `localhost` como endereço da API: ele aponta para o próprio celular. Use o IP LAN do computador ou uma URL HTTPS de túnel que também exponha a API. `npx expo start --tunnel` expõe o Metro/Expo, mas não expõe automaticamente o backend na porta `3001`.
 
-## Credenciais e QR do seed
+## Credenciais de desenvolvimento
 
 Depois de executar `npm run prisma:seed`:
 
 | Uso | E-mail | Senha |
 | --- | --- | --- |
-| Painel administrativo | `admin@emps.com` | `admin123` |
+| Painel do dono do eletroposto | `admin@emps.com` | `admin123` |
+| Administração e aprovações GoodWe | `goodwe@emps.com` | `goodwe123` |
+| Operação EMPS | `operador@emps.com` | `operador123` |
 | Aplicativo do motorista | `motorista@emps.com` | `emps123` |
 
-Dados de teste do carregador Paulista A01:
-
-- token público do QR: `paulista-a01-demo`;
-- código digitável: `EMPS-PAULISTA-A01`;
-- link: `https://app.emps.com.br/c/paulista-a01-demo`;
-- imagem pronta: `mobile/docs/qr/emps-paulista-a01.png`.
+O seed não cria mais carregadores, sessões, pagamentos ou faturamento fictícios.
+Para obter um QR válido, solicite o equipamento em **Cadastro de carregadores**,
+valide a conexão física com o código temporário e entre como operador EMPS para
+homologá-lo. O QR oficial aparece somente após essa aprovação.
 
 O QR mostrado pelo terminal do Expo serve apenas para abrir o app no Expo Go; ele não é o QR do carregador.
 

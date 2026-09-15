@@ -78,6 +78,9 @@ test("atribui salas autenticadas conforme o perfil do JWT", () => {
     "authenticated",
     "operations",
   ]);
+  assert.deepEqual(roomsForRealtimeUser({ exp, sub: "goodwe-1", role: "GOODWE_ADMIN" }), [
+    "authenticated",
+  ]);
   assert.deepEqual(roomsForRealtimeUser({ exp, sub: "operator-1", role: "OPERATOR" }), [
     "authenticated",
     "operations",

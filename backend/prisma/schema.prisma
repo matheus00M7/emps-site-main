@@ -9,7 +9,9 @@ datasource db {
 
 enum Role {
   ADMIN
+  GOODWE_ADMIN
   OPERATOR
+  STATION_OWNER
   CUSTOMER
 }
 
@@ -120,6 +122,15 @@ enum ChargingCommandStatus {
   COMPLETED
 }
 
+enum ChargerProvisioningStatus {
+  PENDING_CONNECTION
+  PENDING_APPROVAL
+  ENABLED
+  REJECTED
+  CANCELED
+  EXPIRED
+}
+
 model User {
   id            String         @id @default(cuid())
   name          String
@@ -131,6 +142,8 @@ model User {
   client        Client?
   refreshTokens RefreshToken[]
   stations      Station[]
+  provisioningRequests ChargerProvisioning[] @relation("ProvisioningRequester")
+  provisioningReviews  ChargerProvisioning[] @relation("ProvisioningReviewer")
 }
 
 model Client {
@@ -176,6 +189,7 @@ model Station {
   updatedAt        DateTime          @updatedAt
   admin            User              @relation(fields: [adminId], references: [id], onDelete: Restrict)
   chargers         Charger[]
+  provisionings    ChargerProvisioning[]
   chargingSessions ChargingSession[]
 
   @@index([adminId])
@@ -214,9 +228,53 @@ model Charger {
   paymentIntents         PaymentIntent[]
   commands               ChargingCommand[]
   alerts                 Alert[]
+  provisioning           ChargerProvisioning?
 
   @@index([stationId, status])
   @@index([administrativeStatus])
+}
+
+model ChargerProvisioning {
+  id                      String                    @id @default(cuid())
+  stationId               String
+  requestedById           String
+  reviewedById            String?
+  chargerId               String?                   @unique
+  status                  ChargerProvisioningStatus @default(PENDING_CONNECTION)
+  name                    String
+  location                String
+  connectorType           String
+  powerType               ChargerPowerType
+  phaseCount              Int?
+  powerKw                 Decimal                   @db.Decimal(10, 2)
+  pricePerKwh             Decimal                   @db.Decimal(10, 2)
+  manufacturer            String
+  model                   String
+  serialNumber            String
+  ocppIdentity            String
+  ocppVersion             String                    @default("1.6J")
+  firmwareVersion         String?
+  activationTokenHash     String                    @unique
+  activationTokenLastFour String
+  activationExpiresAt     DateTime
+  connectionVerifiedAt    DateTime?
+  approvedAt              DateTime?
+  rejectedAt              DateTime?
+  rejectionReason         String?
+  canceledAt              DateTime?
+  createdAt               DateTime                  @default(now())
+  updatedAt               DateTime                  @updatedAt
+  station                 Station                   @relation(fields: [stationId], references: [id], onDelete: Restrict)
+  requestedBy             User                      @relation("ProvisioningRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+  reviewedBy              User?                     @relation("ProvisioningReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  charger                 Charger?                  @relation(fields: [chargerId], references: [id], onDelete: Restrict)
+
+  @@index([stationId, status, createdAt])
+  @@index([requestedById, status])
+  @@index([reviewedById])
+  @@index([status, activationExpiresAt])
+  @@index([serialNumber])
+  @@index([ocppIdentity])
 }
 
 model ChargerLiveStatus {

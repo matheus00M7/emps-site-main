@@ -335,3 +335,55 @@
   font-size: 0.78rem;
   margin-top: 22px;
 }
+
+@media (min-width: 821px) and (max-height: 760px) {
+  .login-screen {
+    overflow-y: auto;
+  }
+
+  .login-head {
+    padding-bottom: 20px;
+    padding-top: 20px;
+  }
+
+  .login-panel {
+    align-items: flex-start;
+    height: auto;
+    min-height: 100vh;
+    padding-bottom: 28px;
+    padding-top: 82px;
+  }
+
+  .login-card {
+    min-height: 0;
+  }
+
+  .login-card h1 {
+    margin-top: 16px;
+  }
+
+  .login-card p {
+    margin-bottom: 28px;
+  }
+
+  .login-fields {
+    gap: 16px;
+  }
+
+  .login-options {
+    margin-top: 18px;
+  }
+
+  .login-terms {
+    margin-top: 28px;
+  }
+
+  .login-footer {
+    margin-top: 26px;
+    position: static;
+  }
+
+  .login-footer small {
+    margin-top: 12px;
+  }
+}

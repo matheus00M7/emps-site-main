@@ -5,6 +5,7 @@ import {
   ChartPie,
   CreditCard,
   GaugeCircle,
+  Globe2,
   HeartPulse,
   HousePlug,
   LayoutDashboard,
@@ -15,7 +16,6 @@ import {
   Siren,
   Users,
   Waypoints,
-  Globe2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -40,8 +40,7 @@ export const semsSidebarItems: ShellNavigationItem[] = [
 export const empsNavigationItems: ModuleNavigationItem[] = [
   { label: "Painel", href: "/dashboard", icon: LayoutDashboard },
   { label: "Configuracoes EMPS", href: "/settings", icon: Settings },
-  // Aba dedicada de carregadores desativada: o dashboard concentra essa visualizacao.
-  // { label: "Carregadores", href: "/chargers", icon: PlugZap },
+  { label: "Carregadores", href: "/chargers", icon: PlugZap },
   { label: "Sessoes", href: "/sessions", icon: BatteryCharging },
   { label: "Pagamentos", href: "/payments", icon: CreditCard },
   { label: "Clientes", href: "/clients", icon: Users },
