@@ -48,27 +48,14 @@ function buildMapHtml(
 </head>
 <body>
   <div id="map"></div>
-  <div class="osm-attribution"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></div>
+  <div class="osm-attribution"><a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></div>
   <script src="https://unpkg.com/maplibre-gl@5.19.0/dist/maplibre-gl.js" onerror="window.ReactNativeWebView.postMessage('map-error')"></script>
   <script>
     const points = ${JSON.stringify(points)};
     const user = ${JSON.stringify(user)};
     const map = new maplibregl.Map({
       container: 'map',
-      style: {
-        version: 8,
-        sources: {
-          osm: {
-            type: 'raster',
-            tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-            tileSize: 256,
-            minzoom: 0,
-            maxzoom: 19,
-            attribution: '© OpenStreetMap contributors'
-          }
-        },
-        layers: [{ id: 'osm-tiles', type: 'raster', source: 'osm' }]
-      },
+      style: 'https://tiles.openfreemap.org/styles/liberty',
       center: [user.longitude, user.latitude],
       zoom: 11.8,
       attributionControl: false
@@ -164,11 +151,15 @@ const styles = StyleSheet.create({
   },
   webview: { backgroundColor: Colors.surface, flex: 1 },
   loading: {
-    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     backgroundColor: Colors.surface,
+    bottom: 0,
     gap: 9,
     justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
     zIndex: 2,
   },
   loadingText: { color: Colors.textMuted, fontFamily: Fonts.medium, fontSize: 11 },

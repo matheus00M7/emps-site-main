@@ -17,7 +17,14 @@ async function bootstrap() {
       origin: string | undefined,
       callback: (error: Error | null, allow?: boolean) => void,
     ) {
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      const isDevelopmentTunnel =
+        process.env.NODE_ENV !== "production" &&
+        typeof origin === "string" &&
+        /^https:\/\/[a-z0-9-]+\.trycloudflare\.com$/i.test(origin);
+
+      if (!origin || allowedOrigins.includes(origin) || isDevelopmentTunnel) {
+        return callback(null, true);
+      }
       return callback(new Error("Origem não autorizada pela API EMPS"), false);
     },
   });

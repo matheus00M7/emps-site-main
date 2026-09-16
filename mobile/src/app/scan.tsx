@@ -322,8 +322,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cameraShade: {
-    ...StyleSheet.absoluteFillObject,
     backgroundColor: '#00000020',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   frame: {
     height: 218,

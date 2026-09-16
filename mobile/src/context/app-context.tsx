@@ -121,6 +121,20 @@ async function storeTokens(tokens: AuthTokens | null) {
   ]);
 }
 
+const authenticationLostHandlers = new Set<() => Promise<void>>();
+
+const api = createMobileApi({
+  baseUrl: EMPS_API_URL,
+  getAccessToken: () => readSecret(STORAGE.accessToken),
+  getRefreshToken: () => readSecret(STORAGE.refreshToken),
+  onAuthenticationLost: async () => {
+    await Promise.allSettled(
+      [...authenticationLostHandlers].map((handler) => handler()),
+    );
+  },
+  onTokensChanged: storeTokens,
+});
+
 function parseStoredValue<T>(value: string | null, fallback: T): T {
   if (!value) return fallback;
   try {
@@ -251,23 +265,18 @@ export function AppProvider({ children }: PropsWithChildren) {
     await AsyncStorage.multiRemove([STORAGE.user, STORAGE.activeSession, STORAGE.history]);
   }, []);
 
+  useEffect(() => {
+    authenticationLostHandlers.add(clearAuthentication);
+    return () => {
+      authenticationLostHandlers.delete(clearAuthentication);
+    };
+  }, [clearAuthentication]);
+
   const isAuthenticationCurrent = useCallback(
     (epoch: number, userId: string | null) =>
       authenticationEpochRef.current === epoch &&
       authenticatedUserIdRef.current === userId,
     [],
-  );
-
-  const api = useMemo(
-    () =>
-      createMobileApi({
-        baseUrl: EMPS_API_URL,
-        getAccessToken: () => readSecret(STORAGE.accessToken),
-        getRefreshToken: () => readSecret(STORAGE.refreshToken),
-        onAuthenticationLost: clearAuthentication,
-        onTokensChanged: storeTokens,
-      }),
-    [clearAuthentication],
   );
 
   const cacheEntitiesForSessions = useCallback(
@@ -292,7 +301,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       if (nextChargers.length > 0) setChargers((current) => mergeById(current, nextChargers));
       if (nextStations.length > 0) setStations((current) => mergeById(current, nextStations));
     },
-    [api, isAuthenticationCurrent],
+    [isAuthenticationCurrent],
   );
 
   const synchronizeSessions = useCallback(async () => {
@@ -318,7 +327,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       ...(nextActiveSession ? [nextActiveSession] : []),
       ...nextHistory,
     ]);
-  }, [api, cacheEntitiesForSessions, isAuthenticationCurrent]);
+  }, [cacheEntitiesForSessions, isAuthenticationCurrent]);
 
   useEffect(() => {
     let mounted = true;
@@ -449,7 +458,7 @@ export function AppProvider({ children }: PropsWithChildren) {
 
       await applyAuthentication(await api.login(normalizedEmail, password));
     },
-    [api, applyAuthentication],
+    [applyAuthentication],
   );
 
   const register = useCallback(
@@ -478,7 +487,7 @@ export function AppProvider({ children }: PropsWithChildren) {
 
       await applyAuthentication(await api.register(normalizedName, normalizedEmail, password));
     },
-    [api, applyAuthentication],
+    [applyAuthentication],
   );
 
   const logout = useCallback(async () => {
@@ -493,7 +502,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       }
     }
     await clearAuthentication();
-  }, [api, clearAuthentication]);
+  }, [clearAuthentication]);
 
   const getStation = useCallback(
     (stationId: string) => stations.find((station) => station.id === stationId),
@@ -539,7 +548,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         }
       }
     },
-    [api, isAuthenticationCurrent],
+    [isAuthenticationCurrent],
   );
 
   const loadStation = useCallback(
@@ -565,7 +574,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       }
       return station;
     },
-    [api, isAuthenticationCurrent],
+    [isAuthenticationCurrent],
   );
 
   const loadCharger = useCallback(
@@ -586,7 +595,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setStations((current) => mergeById(current, [station]));
       return charger;
     },
-    [api, isAuthenticationCurrent],
+    [isAuthenticationCurrent],
   );
 
   const resolveQrCode = useCallback(
@@ -621,7 +630,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       }));
       return resolved;
     },
-    [api],
+    [],
   );
 
   const hasQrBinding = useCallback(
@@ -700,7 +709,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setActiveSession(session);
       return session;
     },
-    [activeSession, api, getCharger, qrBindings, user?.id],
+    [activeSession, getCharger, qrBindings, user?.id],
   );
 
   const refreshActiveSession = useCallback(async () => {
@@ -718,7 +727,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setActiveSession(nextSession);
     if (nextSession) await cacheEntitiesForSessions([nextSession]);
     return nextSession;
-  }, [api, cacheEntitiesForSessions, isAuthenticationCurrent]);
+  }, [cacheEntitiesForSessions, isAuthenticationCurrent]);
 
   const refreshHistory = useCallback(async () => {
     if (EMPS_DEMO_MODE) return historyRef.current;
@@ -735,7 +744,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setHistory(nextHistory);
     await cacheEntitiesForSessions(nextHistory);
     return nextHistory;
-  }, [api, cacheEntitiesForSessions, isAuthenticationCurrent]);
+  }, [cacheEntitiesForSessions, isAuthenticationCurrent]);
 
   const refreshCachedEntities = useCallback(async () => {
     if (EMPS_DEMO_MODE) return;
@@ -756,7 +765,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     if (!isAuthenticationCurrent(authenticationEpoch, authenticatedUserId)) return;
     if (nextStations.length > 0) setStations((current) => mergeById(current, nextStations));
     if (nextChargers.length > 0) setChargers((current) => mergeById(current, nextChargers));
-  }, [api, isAuthenticationCurrent]);
+  }, [isAuthenticationCurrent]);
 
   const flushRealtimeInvalidations = useCallback(async function flushPendingRealtimeInvalidations() {
     if (realtimeReconciliationRunningRef.current) return;
@@ -1010,7 +1019,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setHistory((current) => [completed, ...current.filter((item) => item.id !== completed.id)]);
     setActiveSession(null);
     return completed;
-  }, [activeSession, api, user?.id]);
+  }, [activeSession, user?.id]);
 
   const value = useMemo<AppContextValue>(
     () => ({

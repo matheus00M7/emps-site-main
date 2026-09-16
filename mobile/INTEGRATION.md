@@ -68,15 +68,15 @@ GET /mobile/v1/chargers/:chargerId
 GET /mobile/v1/qr/:publicToken
 ```
 
-`stations/nearby` calcula a proximidade usando as coordenadas do PostgreSQL. A API devolve os marcadores, carregadores e disponibilidade. OpenStreetMap fornece apenas o mapa-base.
+`stations/nearby` calcula a proximidade usando as coordenadas do PostgreSQL. A API devolve os marcadores, carregadores e disponibilidade. OpenFreeMap fornece o mapa-base com dados do OpenStreetMap.
 
-No app nativo, MapLibre usa:
+No app nativo e na versão web, MapLibre usa:
 
 ```text
-https://tile.openstreetmap.org/{z}/{x}/{y}.png
+https://tiles.openfreemap.org/styles/liberty
 ```
 
-Não há chave no APK/IPA. A atribuição é obrigatória. Para produção em escala, substitua o servidor público por um provedor de tiles OpenStreetMap com capacidade/SLA ou por tiles próprios, sem remover a atribuição.
+Não há chave no APK/IPA. As atribuições ao OpenFreeMap e ao OpenStreetMap são obrigatórias. Para produção com garantia de disponibilidade, use um provedor com SLA ou tiles próprios, sem remover as atribuições.
 
 O QR recomendado usa identificador público opaco:
 

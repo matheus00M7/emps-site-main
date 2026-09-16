@@ -2,7 +2,7 @@
 
 Aplicativo do motorista para localizar eletropostos, ler o QR da vaga, escolher o pagamento, iniciar uma recarga e acompanhar consumo, tempo, custo e histórico.
 
-O projeto usa Expo SDK 54, React Native e Expo Router, compatível com o Expo Go 54.x disponível no Android. O modo conectado consome a API NestJS compartilhada em `/mobile/v1`. O modo demonstração existe, mas só entra em ação quando é habilitado explicitamente.
+O projeto usa Expo SDK 57, React Native e Expo Router, compatível com o Expo Go atual. O modo conectado consome a API NestJS compartilhada em `/mobile/v1`. O modo demonstração existe, mas só entra em ação quando é habilitado explicitamente.
 
 ## O que está integrado
 
@@ -10,7 +10,7 @@ O projeto usa Expo SDK 54, React Native e Expo Router, compatível com o Expo Go
 - armazenamento seguro dos tokens no Keychain/Keystore por Expo SecureStore;
 - eletropostos próximos, carregadores, status, potência e tarifa vindos do PostgreSQL;
 - localização foreground opcional;
-- mapa nativo com MapLibre e tiles do OpenStreetMap;
+- mapa interativo com MapLibre e tiles vetoriais do OpenFreeMap baseados no OpenStreetMap;
 - câmera para QR e alternativa por código digitado;
 - resolução do QR no backend antes de qualquer liberação;
 - intenção de pagamento idempotente;
@@ -114,19 +114,17 @@ Abra a imagem abaixo em outra tela ou imprima para testar a câmera:
 
 O QR exibido pelo terminal do Expo contém um endereço `exp://` e serve somente para abrir o aplicativo. Ele não representa um carregador EMPS.
 
-## OpenStreetMap
+## OpenFreeMap e OpenStreetMap
 
-No Android e iOS, `src/components/station-map.tsx` carrega MapLibre GL dentro de uma WebView e usa diretamente os tiles raster padrão:
+No Android, iOS e navegador, o mapa carrega MapLibre GL com o estilo vetorial público do OpenFreeMap, baseado nos dados do OpenStreetMap:
 
 ```text
-https://tile.openstreetmap.org/{z}/{x}/{y}.png
+https://tiles.openfreemap.org/styles/liberty
 ```
 
-Não há chave, conta ou cartão de faturamento. Atribuição ao OpenStreetMap é exibida no mapa. É necessário acesso à internet para baixar o MapLibre e os tiles; os marcadores ainda dependem da API EMPS, pois o OpenStreetMap fornece o mapa-base, não a disponibilidade dos carregadores.
+Não há chave, conta ou cartão de faturamento. As atribuições ao OpenFreeMap e ao OpenStreetMap são exibidas no mapa. É necessário acesso à internet para baixar o MapLibre e os tiles; os marcadores ainda dependem da API EMPS, pois o mapa-base não fornece a disponibilidade dos carregadores.
 
-A versão web de conferência usa uma visualização simplificada; valide o mapa real em Android/iOS.
-
-Os servidores públicos do OpenStreetMap não têm SLA nem capacidade ilimitada. Para uma publicação comercial com tráfego relevante, use um provedor de tiles baseado em OpenStreetMap ou infraestrutura própria, respeitando a política de tiles, o cache e a atribuição.
+O serviço público não oferece SLA. Para uma publicação comercial que exija garantia de disponibilidade, use um provedor com SLA ou infraestrutura própria, preservando as atribuições.
 
 O botão “Como chegar” abre Apple Maps no iOS ou Google Maps no Android. Isso é separado do mapa-base e não exige chave dentro do aplicativo.
 
@@ -164,7 +162,7 @@ Se o app abrir, mas login e eletropostos falharem:
 5. desative temporariamente VPN/rede de convidados ou permita a conexão no Firewall;
 6. não substitua o IP por `localhost`.
 
-Se o mapa ficar em branco, confirme que o celular tem internet e consegue acessar `https://tile.openstreetmap.org`. Uma rede corporativa pode bloquear o CDN do MapLibre ou os tiles.
+Se o mapa ficar em branco, confirme que o celular tem internet e consegue acessar `https://tiles.openfreemap.org`. Uma rede corporativa pode bloquear o CDN do MapLibre ou os tiles.
 
 O cliente realtime usa o namespace `${EXPO_PUBLIC_EMPS_API_URL}/realtime`, envia o access token no handshake e escuta `emps:change`. Se o WebSocket for bloqueado, a tela de recarga consulta a API REST a cada cinco segundos e mostra discretamente que está reconectando. Com o canal ao vivo, a conferência periódica da recarga é reduzida para 30 segundos. O contexto confere sessões a cada 60 segundos conectado ou 15 segundos desconectado; entidades de mapa já armazenadas são revistas a cada cinco minutos.
 
